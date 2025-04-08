@@ -22,6 +22,8 @@
 #include "glm/glm.hpp"
 #include "glm/gtc/type_ptr.hpp"
 
+#include "Surface.h"
+
 // EXAMPLE CALLBACKS
 class Callbacks3D : public CallbackInterface {
 
@@ -212,9 +214,20 @@ int main() {
 	models.emplace("Fish", ModelInfo("./models/blub/blub_triangulated.obj"));
 	models.emplace("Torus", ModelInfo("./models/torus.obj"));
 
+	// Tensor surface
+	Surface splineSurface(5, 3, 3, 50, 50); // 5x5 grid, degree 3, resolution 50x50
+	splineSurface.generateSurface();
+	splineSurface.bind();
+
+	// Amend model dict
+	std::vector<std::string> allModelNames = {
+		"Cow", "Fish", "Torus", "BSpline"
+	};
+	std::string selectedModelName = allModelNames[0]; // default selection
+
 	// Select first model by default.
-	std::string selectedModelName = models.begin()->first;
-	models.at(selectedModelName).bind(); // Bind it.
+	// std::string selectedModelName = models.begin()->first;
+	// models.at(selectedModelName).bind(); // Bind it.
 
 	// A "dictionary" that maps textures' ImGui display names to their Texture.
 	// Because Texture has no default constructor
@@ -244,7 +257,6 @@ int main() {
 	shader.use();
 	cb->updateShadingUniforms(lightPos, lightCol, diffuseCol, ambientStrength, texExistence);
 
-
 	// RENDER LOOP
 	while (!window.shouldClose()) {
 		glfwPollEvents();
@@ -260,21 +272,37 @@ int main() {
 		bool change = false; // Whether any ImGui variable's changed.
 
 		// A drop-down box for choosing the 3D model to render.
+		// if (ImGui::BeginCombo("Model", selectedModelName.c_str()))
+		// {
+		// 	// Iterate over our dictionary's key-val pairs.
+		// 	for (auto& keyVal : models) {
+		// 		// Check if this key (a model display name) was last selected.
+		// 		const bool isSelected = (selectedModelName == keyVal.first);
+
+		// 		// Now check if the user is currently selecting that model.
+		// 		// The use of "isSelected" just changes the colour of the box.
+		// 		if (ImGui::Selectable(keyVal.first.c_str(), isSelected))
+		// 		{
+		// 			selectedModelName = keyVal.first;
+		// 			keyVal.second.bind(); // Bind the selected model.
+		// 		}
+		// 		// Sets the initial focus when the combo is opened
+		// 		if (isSelected) ImGui::SetItemDefaultFocus();
+		// 	}
+		// 	ImGui::EndCombo();
+		// 	change = true;
+		// }
+
 		if (ImGui::BeginCombo("Model", selectedModelName.c_str()))
 		{
-			// Iterate over our dictionary's key-val pairs.
-			for (auto& keyVal : models) {
-				// Check if this key (a model display name) was last selected.
-				const bool isSelected = (selectedModelName == keyVal.first);
-
-				// Now check if the user is currently selecting that model.
-				// The use of "isSelected" just changes the colour of the box.
-				if (ImGui::Selectable(keyVal.first.c_str(), isSelected))
+			for (const std::string& name : allModelNames) {
+				const bool isSelected = (selectedModelName == name);
+				if (ImGui::Selectable(name.c_str(), isSelected))
 				{
-					selectedModelName = keyVal.first;
-					keyVal.second.bind(); // Bind the selected model.
+					selectedModelName = name;
+					if (models.count(name)) models.at(name).bind();
+					else if (name == "Surface") splineSurface.bind();
 				}
-				// Sets the initial focus when the combo is opened
 				if (isSelected) ImGui::SetItemDefaultFocus();
 			}
 			ImGui::EndCombo();
@@ -347,8 +375,12 @@ int main() {
 		}
 		cb->viewPipeline();
 
-		glDrawArrays(GL_TRIANGLES, 0, GLsizei(models.at(selectedModelName).numVerts()));
-
+		if (selectedModelName == "Surface") {
+			glDrawArrays(GL_TRIANGLES, 0, splineSurface.numVerts());
+		}
+		else {
+			glDrawArrays(GL_TRIANGLES, 0, GLsizei(models.at(selectedModelName).numVerts()));
+		}
 		glDisable(GL_FRAMEBUFFER_SRGB); // disable sRGB for things like imgui
 
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

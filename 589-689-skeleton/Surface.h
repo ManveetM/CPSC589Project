@@ -39,6 +39,8 @@ public:
 	void bind();                 // Bind VAO
 	size_t numVerts();           // For draw call
 
+	std::vector<std::vector<glm::vec3>> getControlGrid() { return controlGrid; }
+
 private:
 	std::vector<std::vector<glm::vec3>> controlGrid;
 	CPU_Geometry cpuGeom;

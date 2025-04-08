@@ -1,4 +1,4 @@
-#include <iostream>
+﻿#include <iostream>
 #include <string>
 #include <list>
 #include <vector>
@@ -90,6 +90,19 @@ public:
 		glUniformMatrix4fv(mLoc, 1, GL_FALSE, glm::value_ptr(M));
 		glUniformMatrix4fv(vLoc, 1, GL_FALSE, glm::value_ptr(V));
 		glUniformMatrix4fv(pLoc, 1, GL_FALSE, glm::value_ptr(P));
+	}
+
+	void viewPipelineControlPoints(ShaderProgram& sp) {
+		glm::mat4 M = glm::mat4(1.0);
+		glm::mat4 V = camera.getView();
+		glm::mat4 P = glm::perspective(glm::radians(45.0f), aspect, 0.01f, 1000.f);
+
+		GLint uniMat = glGetUniformLocation(sp, "M");
+		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(M));
+		uniMat = glGetUniformLocation(sp, "V");
+		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(V));
+		uniMat = glGetUniformLocation(sp, "P");
+		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(P));
 	}
 
 	void updateShadingUniforms(
@@ -196,6 +209,7 @@ int main() {
 
 	// SHADERS
 	ShaderProgram shader("shaders/test.vert", "shaders/test.frag");
+	ShaderProgram cpShader("shaders/controlPoints.vert", "shaders/controlPoints.frag");
 
 	auto cb = std::make_shared<Callbacks3D>(shader, window.getWidth(), window.getHeight());
 	// CALLBACKS
@@ -203,48 +217,10 @@ int main() {
 
 	window.setupImGui(); // Make sure this call comes AFTER GLFW callbacks set.
 
-
-	// A "dictionary" that maps models' ImGui display names to their ModelInfo.
-	// Because ModelInfo has no default constructor
-	// (and there's no good one for it in its current form)
-	// We have to use .at() and .emplace() instead of "[]" notation.
-	// See: https://stackoverflow.com/questions/29826155/why-a-default-constructor-is-needed-using-unordered-map-and-tuple
-	std::unordered_map<std::string, ModelInfo> models;
-	models.emplace("Cow", ModelInfo("./models/spot/spot_triangulated.obj"));
-	models.emplace("Fish", ModelInfo("./models/blub/blub_triangulated.obj"));
-	models.emplace("Torus", ModelInfo("./models/torus.obj"));
-
 	// Tensor surface
-	Surface splineSurface(5, 3, 3, 50, 50); // 5x5 grid, degree 3, resolution 50x50
+	Surface splineSurface(5, 3, 3, 10, 10); // 5x5 grid, degree 3, resolution 50x50
 	splineSurface.generateSurface();
 	splineSurface.bind();
-
-	// Amend model dict
-	std::vector<std::string> allModelNames = {
-		"Cow", "Fish", "Torus", "BSpline"
-	};
-	std::string selectedModelName = allModelNames[0]; // default selection
-
-	// Select first model by default.
-	// std::string selectedModelName = models.begin()->first;
-	// models.at(selectedModelName).bind(); // Bind it.
-
-	// A "dictionary" that maps textures' ImGui display names to their Texture.
-	// Because Texture has no default constructor
-	// (and there's no good one for it in its current form)
-	// We have to use .at() and .emplace() instead of "[]" notation.
-	// See: https://stackoverflow.com/questions/29826155/why-a-default-constructor-is-needed-using-unordered-map-and-tuple
-	std::unordered_map<std::string, Texture> textures;
-	textures.emplace("Cow", Texture("./textures/spot/spot_texture.png", GL_LINEAR));
-	textures.emplace("Fish", Texture("./textures/blub/blub_texture.png", GL_LINEAR));
-	const std::string noTexName = "None";
-
-	// Select first texture by default.
-	std::string selectedTexName = textures.begin()->first;
-	textures.at(selectedTexName).bind(); // Bind it.
-
-	// Say we're using textures (if the model supports them).
-	bool texExistence = models.at(selectedModelName).hasUVs();
 
 	// Some variables for shading that ImGui may alter.
 	glm::vec3 lightPos(0.f, 35.f, -35.f);
@@ -252,6 +228,8 @@ int main() {
 	glm::vec3 diffuseCol(1.f, 0.f, 0.f);
 	float ambientStrength = 0.035f;
 	bool simpleWireframe = false;
+
+	bool texExistence = false;
 
 	// Set the initial, default values of the shading uniforms.
 	shader.use();
@@ -269,81 +247,7 @@ int main() {
 
 		ImGui::Begin("Sample window.");
 
-		bool change = false; // Whether any ImGui variable's changed.
-
-		// A drop-down box for choosing the 3D model to render.
-		// if (ImGui::BeginCombo("Model", selectedModelName.c_str()))
-		// {
-		// 	// Iterate over our dictionary's key-val pairs.
-		// 	for (auto& keyVal : models) {
-		// 		// Check if this key (a model display name) was last selected.
-		// 		const bool isSelected = (selectedModelName == keyVal.first);
-
-		// 		// Now check if the user is currently selecting that model.
-		// 		// The use of "isSelected" just changes the colour of the box.
-		// 		if (ImGui::Selectable(keyVal.first.c_str(), isSelected))
-		// 		{
-		// 			selectedModelName = keyVal.first;
-		// 			keyVal.second.bind(); // Bind the selected model.
-		// 		}
-		// 		// Sets the initial focus when the combo is opened
-		// 		if (isSelected) ImGui::SetItemDefaultFocus();
-		// 	}
-		// 	ImGui::EndCombo();
-		// 	change = true;
-		// }
-
-		if (ImGui::BeginCombo("Model", selectedModelName.c_str()))
-		{
-			for (const std::string& name : allModelNames) {
-				const bool isSelected = (selectedModelName == name);
-				if (ImGui::Selectable(name.c_str(), isSelected))
-				{
-					selectedModelName = name;
-					if (models.count(name)) models.at(name).bind();
-					else if (name == "Surface") splineSurface.bind();
-				}
-				if (isSelected) ImGui::SetItemDefaultFocus();
-			}
-			ImGui::EndCombo();
-			change = true;
-		}
-
-		// Only display the texture dropdown if applicable.
-		if (models.at(selectedModelName).hasUVs())
-		{
-			// A drop-down box for choosing the texture to use.
-			if (ImGui::BeginCombo("Texture", selectedTexName.c_str()))
-			{
-				// First, display an option to select NO texture!
-				const bool noneSelected = selectedTexName == noTexName;
-				if (ImGui::Selectable(noTexName.c_str(), noneSelected))
-				{
-					selectedTexName = noTexName;
-				}
-				if (noneSelected) ImGui::SetItemDefaultFocus();
-
-				// Then, present our dictionary's contents as other texture options.
-				for (auto& keyVal : textures) {
-					// Check if this key (a model display name) was last selected.
-					const bool isSelected = (selectedTexName == keyVal.first);
-					// Now check if the user is currently selecting that texture.
-					// The use of "isSelected" just changes the colour of the box.
-					if (ImGui::Selectable(keyVal.first.c_str(), isSelected))
-					{
-						selectedTexName = keyVal.first;
-						keyVal.second.bind(); // Bind the selected texture.
-					}
-					// Sets the initial focus when the combo is opened
-					if (isSelected) ImGui::SetItemDefaultFocus();
-				}
-				ImGui::EndCombo();
-				change = true;
-			}
-		}
-
-		// We'll only render with a texture if the model has UVs and a texture was chosen.
-		texExistence = (models.at(selectedModelName).hasUVs() && selectedTexName != noTexName);
+		bool change = false;
 
 		// If a texture is not in use, the user can pick the diffuse colour.
 		if (!texExistence) change |= ImGui::ColorEdit3("Diffuse colour", glm::value_ptr(diffuseCol));
@@ -364,7 +268,31 @@ int main() {
 		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 		glEnable(GL_DEPTH_TEST);
-		glPolygonMode(GL_FRONT_AND_BACK, (simpleWireframe ? GL_LINE : GL_FILL) );
+		glPolygonMode(GL_FRONT_AND_BACK, (simpleWireframe ? GL_LINE : GL_FILL));
+
+		// Draw control points
+		cpShader.use();
+		cb->viewPipelineControlPoints(cpShader);
+		CPU_Geometry controlPointsCPU;
+		std::vector<glm::vec3> flatControlPoints;
+
+		const auto& grid = splineSurface.getControlGrid();
+		for (const auto& row : grid) {
+			for (const auto& pt : row) {
+				flatControlPoints.push_back(pt);
+			}
+		}
+
+		controlPointsCPU.verts = flatControlPoints;
+
+		GPU_Geometry controlPointsGPU;
+		controlPointsGPU.setVerts(controlPointsCPU.verts);
+		controlPointsGPU.setCols(std::vector<glm::vec3>(controlPointsCPU.verts.size(), glm::vec3(1.0f, 0.0f, 0.0f)));
+		controlPointsGPU.bind();
+
+		glPointSize(10);
+		glDrawArrays(GL_POINTS, 0, controlPointsCPU.verts.size());
+
 
 		shader.use();
 		if (change)
@@ -375,12 +303,10 @@ int main() {
 		}
 		cb->viewPipeline();
 
-		if (selectedModelName == "Surface") {
-			glDrawArrays(GL_TRIANGLES, 0, splineSurface.numVerts());
-		}
-		else {
-			glDrawArrays(GL_TRIANGLES, 0, GLsizei(models.at(selectedModelName).numVerts()));
-		}
+		splineSurface.bind();
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		glDrawArrays(GL_TRIANGLES, 0, splineSurface.numVerts());
+
 		glDisable(GL_FRAMEBUFFER_SRGB); // disable sRGB for things like imgui
 
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());

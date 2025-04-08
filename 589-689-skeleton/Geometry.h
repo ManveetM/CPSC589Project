@@ -19,6 +19,7 @@
 struct CPU_Geometry {
 	std::vector<glm::vec3> verts;
 	std::vector<glm::vec2> uvs;
+	std::vector<glm::vec3> cols;
 	std::vector<glm::vec3> normals;
 };
 
@@ -34,6 +35,7 @@ public:
 
 	void setVerts(const std::vector<glm::vec3>& verts);
 	void setUVs(const std::vector<glm::vec2>& uvs);
+	void setCols(const std::vector<glm::vec3>& cols);
 	void setNormals(const std::vector<glm::vec3>& norms);
 
 private:
@@ -44,4 +46,6 @@ private:
 	VertexBuffer vertBuffer;
 	VertexBuffer uvBuffer;
 	VertexBuffer normalsBuffer;
+
+	VertexBuffer colBuffer;
 };

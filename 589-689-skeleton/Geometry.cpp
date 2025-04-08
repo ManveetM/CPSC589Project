@@ -8,6 +8,7 @@ GPU_Geometry::GPU_Geometry()
 	, vertBuffer(0, 3, GL_FLOAT)
 	, uvBuffer(1, 2, GL_FLOAT)
 	, normalsBuffer(2, 3, GL_FLOAT)
+	, colBuffer(3, 3, GL_FLOAT)
 {}
 
 
@@ -22,4 +23,8 @@ void GPU_Geometry::setUVs(const std::vector<glm::vec2>& uvs) {
 
 void GPU_Geometry::setNormals(const std::vector<glm::vec3>& norms) {
 	normalsBuffer.uploadData(sizeof(glm::vec3) * norms.size(), norms.data(), GL_STATIC_DRAW);
+}
+
+void GPU_Geometry::setCols(const std::vector<glm::vec3>& cols) {
+	colBuffer.uploadData(sizeof(glm::vec3) * cols.size(), cols.data(), GL_STATIC_DRAW);
 }

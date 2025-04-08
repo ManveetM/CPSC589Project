@@ -19,22 +19,31 @@ Surface::Surface(int controlSize, int kU, int kV, int resU, int resV)
 
 std::vector<double> Surface::initializeKnot(int k, int m) {
 	std::vector<double> U;
-	for (int i = 0; i < k; ++i) U.push_back(0.0);
-	double step = 1.0 / (m - k + 1);
-	for (int i = 1; i <= (m - k + 1); ++i) U.push_back(i * step);
-	for (int i = 0; i < k; ++i) U.push_back(1.0);
+
+	double step = 1.0 / (m - k + 2);
+	for (int i = 0; i <= m + k; ++i) {
+		if (i < k) {
+			U.push_back(0.0);
+		}
+		else if (i > m) {
+			U.push_back(1.0);
+		}
+		else {
+			U.push_back(double(i - k + 1) / (m - k + 2));
+		}
+	}
 	return U;
 }
 
 glm::vec3 Surface::E_delta_1(const std::vector<glm::vec3>& ctrlPts, const std::vector<double>& U, float u, int k, int m) {
 	int d = -1;
-	for (int i = 0; i < m + k - 1; ++i) {
+	for (int i = 0; i < m + k; ++i) {
 		if (u >= U[i] && u < U[i + 1]) {
 			d = i;
 			break;
 		}
 	}
-	if (d == -1) d = m - 1;
+	if (d == -1) d = m;
 
 	std::vector<glm::vec3> C;
 	for (int i = 0; i < k; ++i) {
@@ -54,17 +63,16 @@ glm::vec3 Surface::E_delta_1(const std::vector<glm::vec3>& ctrlPts, const std::v
 }
 
 glm::vec3 Surface::evaluateSurfacePoint(float u, float v) {
-	int mU = controlGrid.size();
-	int mV = controlGrid[0].size();
+	int mU = controlGrid.size() - 1;
+	int mV = controlGrid[0].size() - 1;
 
 	auto U = initializeKnot(kU, mU);
 	auto V = initializeKnot(kV, mV);
 
 	// Interpolate along U (for each column)
 	std::vector<glm::vec3> tempCurve;
-	for (int j = 0; j < mV; ++j) {
-		std::vector<glm::vec3> col;
-		for (int i = 0; i < mU; ++i) col.push_back(controlGrid[i][j]);
+	for (int i = 0; i <= mV; ++i) {
+		std::vector<glm::vec3> col = controlGrid[i];
 		tempCurve.push_back(E_delta_1(col, U, u, kU, mU));
 	}
 
@@ -74,7 +82,7 @@ glm::vec3 Surface::evaluateSurfacePoint(float u, float v) {
 void Surface::generateSurface() {
 	cpuGeom.verts.clear();
 	cpuGeom.normals.clear();
-	cpuGeom.cols.clear();
+	//cpuGeom.cols.clear();
 
 	for (int i = 0; i < resU - 1; ++i) {
 		float u0 = float(i) / (resU - 1);
@@ -99,13 +107,13 @@ void Surface::generateSurface() {
 			cpuGeom.verts.push_back(p11);
 
 			// Colors (for now all green)
-			for (int k = 0; k < 6; ++k)
-				cpuGeom.cols.push_back(glm::vec3(0.2f, 0.8f, 0.3f));
+			//for (int k = 0; k < 6; ++k)
+			//	cpuGeom.cols.push_back(glm::vec3(0.2f, 0.8f, 0.3f));
 		}
 	}
 	gpuGeom.bind();
 	gpuGeom.setVerts(cpuGeom.verts);
-	gpuGeom.setCols(cpuGeom.cols);
+	//gpuGeom.setCols(cpuGeom.cols);
 }
 
 void Surface::bind() {

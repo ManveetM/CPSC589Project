@@ -26,7 +26,7 @@ public:
 	void incrementTheta(float dt);
 	void incrementPhi(float dp);
 	void incrementR(float dr);
-	void pan(float dx, float dy);
+	void pan(float dx, float dy, int width, int height);
 
 	Frame getFrame() {
 		return generateFrameVectors();

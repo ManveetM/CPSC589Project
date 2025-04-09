@@ -65,11 +65,19 @@ Frame Camera::generateFrameVectors() {
 	return Frame{ n, u, v };
 }
 
-void Camera::pan(float dx, float dy) {
+void Camera::pan(float dx, float dy, int width, int height) {
 	Frame f = generateFrameVectors();
 	glm::vec3 u = f.u;
 	glm::vec3 v = f.v;
 
-	lookat = glm::translate(glm::mat4(1.0f), 0.00105f * radius * -dx * u) * glm::vec4(lookat, 1.0f);
-	lookat = glm::translate(glm::mat4(1.0f), 0.00105f * radius * dy * v) * glm::vec4(lookat, 1.0f);
+	float ndx = dx / (float) width;
+	float ndy = dy / (float) height;
+
+	float scale = 1.06f * radius * glm::radians(45.0f);
+
+	float aspect = (float) width / (float) height;
+
+	glm::vec3 offset = -ndx * scale * aspect * u + ndy * scale * v;
+	lookat += offset;
 }
+

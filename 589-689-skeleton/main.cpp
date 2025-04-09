@@ -26,6 +26,17 @@
 
 #include "Surface.h"
 
+struct PlantPart {
+    std::string name;
+    glm::mat4 partMatrix;
+};
+
+struct Plant {
+	std::string name;
+    std::vector<PlantPart> parts;
+    glm::mat4 modelMatrix;
+};
+
 // EXAMPLE CALLBACKS
 class Callbacks3D : public CallbackInterface {
 
@@ -53,6 +64,10 @@ public:
 
 	bool isLeftMouseDown() {
 		return leftMouseDown;
+	}
+
+	void setMode(int mode_) {
+		mode = mode_;
 	}
 
 	virtual void keyCallback(int key, int scancode, int action, int mods) {
@@ -87,32 +102,42 @@ public:
     }
 
     virtual void cursorPosCallback(double xpos, double ypos) {
-		if (rightMouseDown) {
-			camera.incrementTheta(ypos - mouseOldY);
-			camera.incrementPhi(xpos - mouseOldX);
+		if (mode == 0) {
+			if (rightMouseDown) {
+				camera.incrementTheta(ypos - mouseOldY);
+				camera.incrementPhi(xpos - mouseOldX);
+			}
+			if (middleMouseDown) {
+				float deltaX = xpos - mouseOldX;
+				float deltaY = ypos - mouseOldY;
+				camera.pan(deltaX, deltaY, screenWidth, screenHeight);
+			}
+
+			if (isDraggingControlPoint) {
+				Frame localFrame = camera.getFrame();
+
+				float deltaX = xpos - mouseOldX;
+				float deltaY = ypos - mouseOldY;
+
+				float ndx = deltaX / (float) screenWidth;
+				float ndy = deltaY / (float) screenHeight;
+
+				float distance = glm::length(controlPointPos - camera.getPos());
+
+				float scale = 2.0f * distance * tan(glm::radians(45.0f) * 0.5f); // Use actual camera FOV here if available
+
+				glm::vec3 offset = ndx * scale * aspect * localFrame.u - ndy * scale * localFrame.v;
+
+				controlPointPos += offset;
+				controlPointPosUpdated = true;
+			}
+
+			mouseOldX = xpos;
+			mouseOldY = ypos;
 		}
-		if (middleMouseDown) {
-			float deltaX = xpos - mouseOldX;
-			float deltaY = ypos - mouseOldY;
-			camera.pan(deltaX, deltaY);
+		else if (mode == 1) {
+
 		}
-
-		if (isDraggingControlPoint) {
-			Frame localFrame = camera.getFrame();
-
-			float deltaX = xpos - mouseOldX;
-			float deltaY = ypos - mouseOldY;
-
-			float distance = glm::length(controlPointPos - camera.getPos());
-
-			newControlPointPos = glm::translate(glm::mat4(1.0f), 0.00105f * distance * deltaX * localFrame.u) * glm::vec4(controlPointPos, 1.0f);
-			newControlPointPos = glm::translate(glm::mat4(1.0f), 0.00105f * distance * -deltaY * localFrame.v) * glm::vec4(newControlPointPos, 1.0f);
-
-			controlPointPos = newControlPointPos;
-			controlPointPosUpdated = true;
-		}
-		mouseOldX = xpos;
-		mouseOldY = ypos;
     }
 
 	// Updates the screen width and height, in screen coordinates
@@ -158,6 +183,26 @@ public:
 		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(P));
 	}
 
+	void viewPipelineEditing(ShaderProgram& sp) {
+		glm::mat4 M = glm::mat4(1.0f);
+		glm::mat4 V = camera.getView();
+	
+		float orthoLeft = -1.0f;
+		float orthoRight = 1.0f;
+		float orthoBottom = -1.0f;
+		float orthoTop = 1.0f;
+		float orthoNear = -1.0f;
+		float orthoFar = 1.0f;
+		glm::mat4 P = glm::ortho(orthoLeft, orthoRight, orthoBottom, orthoTop, orthoNear, orthoFar);
+	
+		GLint uniMat = glGetUniformLocation(sp, "M");
+		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(M));
+		uniMat = glGetUniformLocation(sp, "V");
+		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(V));
+		uniMat = glGetUniformLocation(sp, "P");
+		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(P));
+	}
+
 	void updateShadingUniforms(
 		const glm::vec3& lightPos, const glm::vec3& lightCol,
 		const glm::vec3& diffuseCol, float ambientStrength, bool texExistence
@@ -189,7 +234,8 @@ public:
 	bool isDraggingControlPoint = false;
 	bool controlPointPosUpdated = false;
 	glm::vec3 controlPointPos;
-	glm::vec3 newControlPointPos;
+
+	int mode;
 
 	Camera camera;
 private:
@@ -278,6 +324,7 @@ int main() {
 	// SHADERS
 	ShaderProgram shader("shaders/test.vert", "shaders/test.frag");
 	ShaderProgram cpShader("shaders/controlPoints.vert", "shaders/controlPoints.frag");
+	ShaderProgram editingShader("shaders/editing.vert", "shaders/editing.frag");
 	ShaderProgram pickerShader("shaders/test.vert", "shaders/picker.frag");
 
 	auto cb = std::make_shared<Callbacks3D>(shader, pickerShader, window.getWidth(), window.getHeight());
@@ -325,6 +372,11 @@ int main() {
 	shader.use();
 	cb->updateShadingUniforms(lightPos, lightCol, diffuseCol, ambientStrength, texExistence);
 
+	// Plant Objects
+
+
+
+
 	// RENDER LOOP
 	while (!window.shouldClose()) {
 		glfwPollEvents();
@@ -350,10 +402,46 @@ int main() {
 
 		// Framerate display, in case you need to debug performance.
 		ImGui::Text("Average %.1f ms/frame (%.1f fps)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+
+		static const char* options[] = { "Default", "Editing" };
+		static int comboSelection = 0;
+		static bool modeChanged = false;
+		cb->setMode(comboSelection);
+
+		ImGui::Text("Mode");
+		if (ImGui::BeginCombo("##Mode", options[comboSelection])) {
+			for (int i = 0; i < 2; ++i) {
+				bool isSelected = (comboSelection == i);
+				if (ImGui::Selectable(options[i], isSelected)) {
+					comboSelection = i;
+					modeChanged = true;
+
+				}
+				if (isSelected) {
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+			ImGui::EndCombo();
+		}
+		
 		ImGui::End();
 		ImGui::Render();
 
-		// __________________________________________________________________
+	glEnable(GL_LINE_SMOOTH);
+	glEnable(GL_FRAMEBUFFER_SRGB);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glEnable(GL_DEPTH_TEST);
+
+	if (comboSelection == 1) {
+		editingShader.use();
+		cb->viewPipelineEditing(editingShader);
+
+	} else { // Default mode
+		
+		glPolygonMode(GL_FRONT_AND_BACK, (simpleWireframe ? GL_LINE : GL_FILL));
+
+				// __________________________________________________________________
 		// Handle mouse input for control point dragging
 		if (cb->isLeftMouseDown()) {
 			if (!cb->isDraggingControlPoint) {
@@ -420,18 +508,11 @@ int main() {
 			}
 		}
 
-		glEnable(GL_LINE_SMOOTH);
-		glEnable(GL_FRAMEBUFFER_SRGB);
-		glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-		glEnable(GL_DEPTH_TEST);
-		glPolygonMode(GL_FRONT_AND_BACK, (simpleWireframe ? GL_LINE : GL_FILL));
-
 		// __________________________________________________________________
 		// Update the control point position if the user is dragging it
 
 		if (cb->controlPointPosUpdated) {
-			splineSurface.setControlPoint(index, cb->newControlPointPos);
+			splineSurface.setControlPoint(index, cb->controlPointPos);
 
 			flatControlPoints.clear();
 			const auto& grid = splineSurface.getControlGrid();
@@ -470,7 +551,7 @@ int main() {
 		splineSurface.bind();
 		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 		glDrawArrays(GL_TRIANGLES, 0, splineSurface.numVerts());
-
+	}
 
 		// __________________________________________________________________
 		// __________________________________________________________________

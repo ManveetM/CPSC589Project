@@ -56,3 +56,21 @@ Texture::Texture(std::string path, GLint interpolation)
 		throw std::runtime_error("Failed to read texture data from file!");
 	}
 }
+
+Texture::Texture(int level, GLint internalFormat, GLsizei width, GLsizei height, GLenum format, GLenum type, GLint interpolation)
+	: textureID(), interpolation(interpolation)
+{
+
+	bind();
+
+	// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glTexImage2D.xhtml
+	glTexImage2D(GL_TEXTURE_2D, level, internalFormat, width, height, 0, format, type, NULL);
+
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, interpolation);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, interpolation);
+
+	unbind();
+}
+

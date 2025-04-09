@@ -182,3 +182,58 @@ private:
 	GLuint textureID;
 
 };
+
+
+class FramebufferHandle {
+
+public:
+	FramebufferHandle();
+
+
+	// Disallow copying
+	FramebufferHandle(const FramebufferHandle&) = delete;
+	FramebufferHandle operator=(const FramebufferHandle&) = delete;
+
+	// Allow moving
+	FramebufferHandle(FramebufferHandle&& other) noexcept;
+	FramebufferHandle& operator=(FramebufferHandle&& other) noexcept;
+
+	// Clean up after ourselves.
+	~FramebufferHandle();
+
+	// Allow casting from this type into a GLuint
+	// This allows usage in situations where a function expects a GLuint
+	operator GLuint() const;
+	GLuint value() const;
+
+private:
+	GLuint framebufferID;
+};
+
+
+// An RAII class for managing a Renderbuffer GLuint for OpenGL.
+class RenderbufferHandle {
+
+public:
+	RenderbufferHandle();
+
+
+	// Disallow copying
+	RenderbufferHandle(const RenderbufferHandle&) = delete;
+	RenderbufferHandle operator=(const RenderbufferHandle&) = delete;
+
+	// Allow moving
+	RenderbufferHandle(RenderbufferHandle&& other) noexcept;
+	RenderbufferHandle& operator=(RenderbufferHandle&& other) noexcept;
+
+	// Clean up after ourselves.
+	~RenderbufferHandle();
+
+	// Allow casting from this type into a GLuint
+	// This allows usage in situations where a function expects a GLuint
+	operator GLuint() const;
+	GLuint value() const;
+
+private:
+	GLuint renderbufferID;
+};

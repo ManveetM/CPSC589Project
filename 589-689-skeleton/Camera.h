@@ -9,6 +9,12 @@
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
+struct Frame {
+	glm::vec3 n;
+	glm::vec3 u;
+	glm::vec3 v;
+};
+
 class Camera {
 public:
 
@@ -16,13 +22,22 @@ public:
 
 	glm::mat4 getView();
 	glm::vec3 getPos();
+
 	void incrementTheta(float dt);
 	void incrementPhi(float dp);
 	void incrementR(float dr);
+	void pan(float dx, float dy);
+
+	Frame getFrame() {
+		return generateFrameVectors();
+	}
 
 private:
 
+	glm::vec3 lookat;
 	float theta;
 	float phi;
 	float radius;
+
+	Frame generateFrameVectors();
 };

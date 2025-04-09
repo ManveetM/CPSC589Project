@@ -8,18 +8,21 @@
 #include "glm/gtc/matrix_transform.hpp"
 
 Camera::Camera(float t, float p, float r) : theta(t), phi(p), radius(r) {
+	lookat = glm::vec3(0.0f, 0.0f, 0.0f);
 }
 
 glm::mat4 Camera::getView() {
-	glm::vec3 eye = radius * glm::vec3(std::cos(theta) * std::sin(phi), std::sin(theta), std::cos(theta) * std::cos(phi));
-	glm::vec3 at = glm::vec3(0.0f, 0.0f, 0.0f);
+	glm::vec3 offset = radius * glm::vec3(std::cos(theta) * std::sin(phi), std::sin(theta), std::cos(theta) * std::cos(phi));
+	glm::vec3 eye = lookat + offset;
+	glm::vec3 at = lookat;
 	glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 
 	return glm::lookAt(eye, at, up);
 }
 
 glm::vec3 Camera::getPos() {
-	return radius * glm::vec3(std::cos(theta) * std::sin(phi), std::sin(theta), std::cos(theta) * std::cos(phi));
+	glm::vec3 offset = radius * glm::vec3(std::cos(theta) * std::sin(phi), std::sin(theta), std::cos(theta) * std::cos(phi));
+	return lookat + offset;
 }
 
 void Camera::incrementTheta(float dt) {
@@ -39,4 +42,29 @@ void Camera::incrementPhi(float dp) {
 
 void Camera::incrementR(float dr) {
 	radius -= dr;
+	if (radius <= 0.3f) {
+		radius = 0.3f;
+	}
+}
+
+Frame Camera::generateFrameVectors() {
+	glm::vec3 offset = radius * glm::vec3(std::cos(theta) * std::sin(phi), std::sin(theta), std::cos(theta) * std::cos(phi));
+	glm::vec3 eye = lookat + offset;
+	glm::vec3 n = glm::normalize(eye - lookat);
+
+	glm::vec3 upApprox = glm::vec3(0.0f, 1.0f, 0.0f);
+	glm::vec3 v = glm::normalize(upApprox - glm::dot(upApprox, n) * n);
+
+	glm::vec3 u = glm::normalize(glm::cross(v, n));
+
+	return Frame{ n, u, v };
+}
+
+void Camera::pan(float dx, float dy) {
+	Frame f = generateFrameVectors();
+	glm::vec3 u = f.u;
+	glm::vec3 v = f.v;
+
+	lookat = glm::translate(glm::mat4(1.0f), 0.00105f * radius * -dx * u) * glm::vec4(lookat, 1.0f);
+	lookat = glm::translate(glm::mat4(1.0f), 0.00105f * radius * dy * v) * glm::vec4(lookat, 1.0f);
 }

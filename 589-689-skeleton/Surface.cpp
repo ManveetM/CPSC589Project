@@ -35,54 +35,115 @@ std::vector<double> Surface::initializeKnot(int k, int m) {
 	return U;
 }
 
-glm::vec3 Surface::E_delta_1(const std::vector<glm::vec3>& ctrlPts, const std::vector<double>& U, float u, int k, int m) {
-	int d = -1;
-	for (int i = 0; i < m + k; ++i) {
+glm::vec3 Surface::E_delta(const std::vector<std::vector<glm::vec3>>& ctrlPts,
+	const std::vector<double>& U, const std::vector<double>& V,
+	float u, float v, int kU, int kV, int mU, int mV) {
+
+	int dU = -1;
+	for (int i = 0; i < mU + kU; ++i) {
 		if (u >= U[i] && u < U[i + 1]) {
-			d = i;
+			dU = i;
 			break;
 		}
 	}
-	if (d == -1) d = m;
+	if (dU == -1) dU = mU;
+
+	int dV = -1;
+	for (int i = 0; i < mV + kV; ++i) {
+		if (v >= V[i] && v < V[i + 1]) {
+			dV = i;
+			break;
+		}
+	}
+	if (dV == -1) dV = mV;
 
 	std::vector<glm::vec3> C;
-	for (int i = 0; i < k; ++i) {
-		int idx = std::max(0, d - i);
-		C.push_back(ctrlPts[idx]);
+
+	for (int i = 0; i < kU; ++i) {
+		std::vector<glm::vec3> D;
+
+		for (int j = 0; j < kV; ++j) {
+			D.push_back(ctrlPts[dU - i][dV - j]);
+		}
+
+		for (int r = kV; r >= 2; --r) {
+			int j = dV;
+			for (int s = 0; s <= r - 2; ++s) {
+				float omega = (v - V[j]) / (V[j + r - 1] - V[j]);
+				D[s] = omega * D[s] + (1 - omega) * D[s + 1];
+				j--;
+			}
+		}
+
+		C.push_back(D[0]);
 	}
 
-	for (int r = k; r >= 2; --r) {
-		int i = d;
+	for (int r = kU; r >= 2; --r) {
+		int i = dU;
 		for (int s = 0; s <= r - 2; ++s) {
 			float omega = (u - U[i]) / (U[i + r - 1] - U[i]);
 			C[s] = omega * C[s] + (1 - omega) * C[s + 1];
 			i--;
 		}
 	}
+
 	return C[0];
 }
 
-glm::vec3 Surface::evaluateSurfacePoint(float u, float v) {
-	int mU = controlGrid.size() - 1;
-	int mV = controlGrid[0].size() - 1;
-
-	auto U = initializeKnot(kU, mU);
-	auto V = initializeKnot(kV, mV);
-
-	// Interpolate along U (for each column)
-	std::vector<glm::vec3> tempCurve;
-	for (int i = 0; i <= mV; ++i) {
-		std::vector<glm::vec3> col = controlGrid[i];
-		tempCurve.push_back(E_delta_1(col, U, u, kU, mU));
-	}
-
-	return E_delta_1(tempCurve, V, v, kV, mV);
-}
+//glm::vec3 Surface::E_delta_1(const std::vector<glm::vec3>& ctrlPts, const std::vector<double>& U, float u, int k, int m) {
+//	int d = -1;
+//	for (int i = 0; i < m + k; ++i) {
+//		if (u >= U[i] && u < U[i + 1]) {
+//			d = i;
+//			break;
+//		}
+//	}
+//	if (d == -1) d = m;
+//
+//	std::vector<glm::vec3> C;
+//	for (int i = 0; i < k; ++i) {
+//		//int idx = std::max(0, d - i);
+//		C.push_back(ctrlPts[d-i]);
+//	}
+//
+//	for (int r = k; r >= 2; --r) {
+//		int i = d;
+//		for (int s = 0; s <= r - 2; ++s) {
+//			float omega = (u - U[i]) / (U[i + r - 1] - U[i]);
+//			C[s] = omega * C[s] + (1 - omega) * C[s + 1];
+//			i--;
+//		}
+//	}
+//	return C[0];
+//}
+//
+//glm::vec3 Surface::evaluateSurfacePoint(float u, float v) {
+//	int mU = controlGrid.size() - 1;
+//	int mV = controlGrid[0].size() - 1;
+//
+//	auto U = initializeKnot(kU, mU);
+//	auto V = initializeKnot(kV, mV);
+//
+//	// Interpolate along U (for each column)
+//	std::vector<glm::vec3> tempCurve;
+//	for (int i = 0; i <= mV; ++i) {
+//		std::vector<glm::vec3> col = controlGrid[i];
+//		tempCurve.push_back(E_delta_1(col, U, u, kU, mU));
+//	}
+//
+//	return E_delta_1(tempCurve, V, v, kV, mV);
+//}
 
 void Surface::generateSurface() {
 	cpuGeom.verts.clear();
 	cpuGeom.normals.clear();
 	//cpuGeom.cols.clear();
+
+	int mU = controlGrid.size() - 1;
+	int mV = controlGrid[0].size() - 1;
+
+	auto U = initializeKnot(kU, mU);
+	auto V = initializeKnot(kV, mV);
 
 	for (int i = 0; i < resU - 1; ++i) {
 		float u0 = float(i) / (resU - 1);
@@ -91,10 +152,17 @@ void Surface::generateSurface() {
 			float v0 = float(j) / (resV - 1);
 			float v1 = float(j + 1) / (resV - 1);
 
-			glm::vec3 p00 = evaluateSurfacePoint(u0, v0);
-			glm::vec3 p10 = evaluateSurfacePoint(u1, v0);
-			glm::vec3 p01 = evaluateSurfacePoint(u0, v1);
-			glm::vec3 p11 = evaluateSurfacePoint(u1, v1);
+			//glm::vec3 p00 = evaluateSurfacePoint(u0, v0);
+			//glm::vec3 p10 = evaluateSurfacePoint(u1, v0);
+			//glm::vec3 p01 = evaluateSurfacePoint(u0, v1);
+			//glm::vec3 p11 = evaluateSurfacePoint(u1, v1);
+
+			glm::vec3 p00 = E_delta(controlGrid, U, V, u0, v0, kU, kV, mU, mV);
+			glm::vec3 p10 = E_delta(controlGrid, U, V, u1, v0, kU, kV, mU, mV);
+			glm::vec3 p01 = E_delta(controlGrid, U, V, u0, v1, kU, kV, mU, mV);
+			glm::vec3 p11 = E_delta(controlGrid, U, V, u1, v1, kU, kV, mU, mV);
+
+
 
 			// First triangle
 			cpuGeom.verts.push_back(p00);

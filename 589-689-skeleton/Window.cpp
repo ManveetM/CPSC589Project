@@ -151,3 +151,9 @@ glm::ivec2 Window::getSize() const {
 	glfwGetWindowSize(window.get(), &w, &h);
 	return glm::ivec2(w, h);
 }
+
+glm::ivec2 Window::getFramebufferSize() const {
+	int w, h;
+	glfwGetFramebufferSize(window.get(), &w, &h);
+	return glm::ivec2(w, h);
+}

@@ -40,6 +40,14 @@ public:
 	size_t numVerts();           // For draw call
 
 	std::vector<std::vector<glm::vec3>> getControlGrid() { return controlGrid; }
+	void setControlPoint(int index, const glm::vec3& newPos) {
+		int i = 0;
+		while (index > (i + 1) * controlGrid.size() - 1) {
+			i += 1;
+		}
+		int j = index - controlGrid.size() * i;
+		controlGrid[i][j] = newPos;
+	}
 
 private:
 	std::vector<std::vector<glm::vec3>> controlGrid;
@@ -50,6 +58,9 @@ private:
 	int resU, resV;
 
 	std::vector<double> initializeKnot(int k, int m);
-	glm::vec3 E_delta_1(const std::vector<glm::vec3>& ctrlPts, const std::vector<double>& U, float u, int k, int m);
-	glm::vec3 evaluateSurfacePoint(float u, float v);
+	//glm::vec3 E_delta_1(const std::vector<glm::vec3>& ctrlPts, const std::vector<double>& U, float u, int k, int m);
+	glm::vec3 E_delta(const std::vector<std::vector<glm::vec3>>& ctrlPts,
+		const std::vector<double>& U, const std::vector<double>& V, float u, float v,
+		int kU, int kV, int mU, int mV);
+	//glm::vec3 evaluateSurfacePoint(float u, float v);
 };

@@ -41,7 +41,8 @@ GLuint ShaderHandle::value() const {
 
 ShaderProgramHandle::ShaderProgramHandle()
 	: programID(glCreateProgram())
-{ }
+{
+}
 
 
 ShaderProgramHandle::ShaderProgramHandle(ShaderProgramHandle&& other) noexcept
@@ -179,4 +180,74 @@ TextureHandle::operator GLuint() const {
 
 GLuint TextureHandle::value() const {
 	return textureID;
+}
+
+//------------------------------------------------------------------------------
+
+FramebufferHandle::FramebufferHandle()
+	: framebufferID(0) // Due to OpenGL syntax, we can't initial directly here, like we want.
+{
+	glGenFramebuffers(1, &framebufferID);
+}
+
+
+FramebufferHandle::FramebufferHandle(FramebufferHandle&& other) noexcept
+	: framebufferID(std::move(other.framebufferID))
+{
+	other.framebufferID = 0;
+}
+
+FramebufferHandle& FramebufferHandle::operator=(FramebufferHandle&& other) noexcept {
+	std::swap(framebufferID, other.framebufferID);
+	return *this;
+}
+
+
+FramebufferHandle::~FramebufferHandle() {
+	glDeleteFramebuffers(1, &framebufferID);
+}
+
+
+FramebufferHandle::operator GLuint() const {
+	return framebufferID;
+}
+
+
+GLuint FramebufferHandle::value() const {
+	return framebufferID;
+}
+
+//------------------------------------------------------------------------------
+
+RenderbufferHandle::RenderbufferHandle()
+	: renderbufferID(0) // Due to OpenGL syntax, we can't initial directly here, like we want.
+{
+	glGenRenderbuffers(1, &renderbufferID);
+}
+
+
+RenderbufferHandle::RenderbufferHandle(RenderbufferHandle&& other) noexcept
+	: renderbufferID(std::move(other.renderbufferID))
+{
+	other.renderbufferID = 0;
+}
+
+RenderbufferHandle& RenderbufferHandle::operator=(RenderbufferHandle&& other) noexcept {
+	std::swap(renderbufferID, other.renderbufferID);
+	return *this;
+}
+
+
+RenderbufferHandle::~RenderbufferHandle() {
+	glDeleteRenderbuffers(1, &renderbufferID);
+}
+
+
+RenderbufferHandle::operator GLuint() const {
+	return renderbufferID;
+}
+
+
+GLuint RenderbufferHandle::value() const {
+	return renderbufferID;
 }

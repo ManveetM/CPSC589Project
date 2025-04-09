@@ -52,7 +52,12 @@ Frame Camera::generateFrameVectors() {
 	glm::vec3 eye = lookat + offset;
 	glm::vec3 n = glm::normalize(eye - lookat);
 
-	glm::vec3 upApprox = glm::vec3(0.0f, 1.0f, 0.0f);
+	glm::vec3 upApprox = glm::vec3(
+        -std::sin(phi) * std::cos(theta),
+        std::cos(theta),
+        -std::cos(phi) * std::cos(theta)
+    );
+
 	glm::vec3 v = glm::normalize(upApprox - glm::dot(upApprox, n) * n);
 
 	glm::vec3 u = glm::normalize(glm::cross(v, n));

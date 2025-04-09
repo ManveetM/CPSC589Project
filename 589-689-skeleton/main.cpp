@@ -76,7 +76,6 @@ public:
 			if (action == GLFW_PRESS)			leftMouseDown = true;
 			else if (action == GLFW_RELEASE) {
 				isDraggingControlPoint = false;
-				localFrameCreated = false;
 				leftMouseDown = false;
 			}
 		}
@@ -99,22 +98,10 @@ public:
 		}
 
 		if (isDraggingControlPoint) {
-			if (!localFrameCreated) {
-				glm::vec3 n = glm::normalize(camera.getPos() - controlPointPos);
-				glm::vec3 upApprox = glm::vec3(0.0f, 1.0f, 0.0f);
-				glm::vec3 v = glm::normalize(upApprox - glm::dot(upApprox, n) * n);
-				glm::vec3 u = glm::normalize(glm::cross(v, n));
-
-				localFrame = Frame{ n, u, v };
-				localFrameCreated = true;
-			}
+			Frame localFrame = camera.getFrame();
 
 			float deltaX = xpos - mouseOldX;
 			float deltaY = ypos - mouseOldY;
-
-			std::cout << "n: " << localFrame.n.x << " " << localFrame.n.y << " " << localFrame.n.z << std::endl;
-			std::cout << "u: " << localFrame.u.x << " " << localFrame.u.y << " " << localFrame.u.z << std::endl;
-			std::cout << "v: " << localFrame.v.x << " " << localFrame.v.y << " " << localFrame.v.z << std::endl;
 
 			float distance = glm::length(controlPointPos - camera.getPos());
 
@@ -203,8 +190,6 @@ public:
 	bool controlPointPosUpdated = false;
 	glm::vec3 controlPointPos;
 	glm::vec3 newControlPointPos;
-	Frame localFrame;
-	bool localFrameCreated = false;;
 
 	Camera camera;
 private:

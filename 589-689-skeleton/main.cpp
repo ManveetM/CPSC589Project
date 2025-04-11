@@ -18,6 +18,8 @@
 #include "Camera.h"
 #include "Framebuffer.h"
 #include "Renderbuffer.h"
+//#include "Plant.h"
+//#include "PlantPart.h"
 
 #include "GeomLoaderForOBJ.h"
 
@@ -26,69 +28,70 @@
 
 #include "Surface.h"
 
-struct PointsData {
-	CPU_Geometry cpuGeom;
+ struct PointsData {
+ 	CPU_Geometry cpuGeom;
 
-	std::vector<bool> selected;
-	std::vector<float> weights;
-	bool needsUpdate = true;
+ 	std::vector<bool> selected;
+ 	std::vector<float> weights;
+ 	bool needsUpdate = true;
 
-	void clear() {
-		cpuGeom.verts.clear();
-		cpuGeom.cols.clear();
-		selected.clear();
-		weights.clear();
-	}
-};
+ 	void clear() {
+ 		cpuGeom.verts.clear();
+ 		cpuGeom.cols.clear();
+ 		selected.clear();
+ 		weights.clear();
+ 	}
+ };
 
-struct PlantPart {
-	std::string name;
+ struct PlantPart {
+ 	std::string name;
 
-	PointsData leftControlPoints;
-	PointsData rightControlPoints;
-	PointsData crossSectionControlPoints;
+ 	PointsData leftControlPoints;
+ 	PointsData rightControlPoints;
+ 	PointsData crossSectionControlPoints;
 
-	std::vector<glm::vec3> leftCurve;
-	std::vector<glm::vec3> rightCurve;
-	std::vector<glm::vec3> crossSectionCurve;
+ 	std::vector<glm::vec3> leftCurve;
+ 	std::vector<glm::vec3> rightCurve;
+ 	std::vector<glm::vec3> crossSectionCurve;
 
-	bool needsUpdate = false;
-	std::vector<glm::vec3> surface;
+ 	bool needsUpdate = false;
+ 	std::vector<glm::vec3> surface;
 
-	glm::vec3 scale;
-	glm::vec3 translation;
-	glm::vec3 rotation;
+ 	glm::vec3 scale;
+ 	glm::vec3 translation;
+ 	glm::vec3 rotation;
 
-	glm::mat4 partMatrix;
+ 	glm::mat4 partMatrix;
 
-	PlantPart(std::string name)
-		: name(name)
-		, scale(1.0f, 1.0f, 1.0f)
-		, translation(0.0f, 0.0f, 0.0f)
-		, rotation(0.0f, 0.0f, 0.0f)
-		, partMatrix(glm::mat4(1.0f))
-	{}
-};
+ 	PlantPart(std::string name)
+ 		: name(name)
+ 		, scale(1.0f, 1.0f, 1.0f)
+ 		, translation(0.0f, 0.0f, 0.0f)
+ 		, rotation(0.0f, 0.0f, 0.0f)
+ 		, partMatrix(glm::mat4(1.0f))
+ 	{
+ 	}
+ };
 
-struct Plant {
-	std::string name;
-	std::vector<PlantPart> parts;
-	glm::mat4 modelMatrix;
+ struct Plant {
+ 	std::string name;
+ 	std::vector<PlantPart> parts;
+ 	glm::mat4 modelMatrix;
 
-	Plant(const std::string& name)
-		: name(name), parts(parts), modelMatrix(modelMatrix) {
-	}
+ 	Plant(const std::string& name)
+ 		: name(name), parts(parts), modelMatrix(modelMatrix) {
+ 	}
 
-	void addPart(PlantPart part) {
-		parts.push_back(part);
-	}
+ 	void addPart(PlantPart part) {
+ 		parts.push_back(part);
+ 	}
 
-	void removePart(int index) {
-		if (index >= 0 && index < parts.size()) {
-			parts.erase(parts.begin() + index);
-		}
-	}
-};
+ 	void removePart(int index) {
+ 		if (index >= 0 && index < parts.size()) {
+ 			parts.erase(parts.begin() + index);
+ 		}
+ 	}
+ };
 
 // EXAMPLE CALLBACKS
 class Callbacks3D : public CallbackInterface {
@@ -131,7 +134,7 @@ public:
 		}
 	}
 
-    virtual void mouseButtonCallback(int button, int action, int mods) {
+	virtual void mouseButtonCallback(int button, int action, int mods) {
 
 		auto& io = ImGui::GetIO();
 		if (io.WantCaptureMouse && action == GLFW_PRESS) return;
@@ -141,12 +144,15 @@ public:
 
 		if (button == GLFW_MOUSE_BUTTON_RIGHT) {
 			if (action == GLFW_PRESS) {
-				if (mode == 1) {
+				if (mode == 1 && !previewingPart && !previewingPlant) {
 					//Remove a point
 					int indexToDelete = -1;
+
+					if (cp == nullptr) return;
+
 					for (int i = 0; i < cp->cpuGeom.verts.size(); i++) {
 						glm::vec3 delta = (cp->cpuGeom.verts[i] - glm::vec3(screenX, screenY, 0.f));
-						if (glm::length(delta) < 0.1) {
+						if (glm::length(delta) < 0.025f) {
 							indexToDelete = i;
 							break;
 						}
@@ -176,7 +182,7 @@ public:
 				int indexToMove = -1;
 				for (int i = 0; i < cp->cpuGeom.verts.size(); i++) {
 					glm::vec3 delta = (cp->cpuGeom.verts[i] - glm::vec3(screenX, screenY, 0.f));
-					if (glm::length(delta) < 0.1) {
+					if (glm::length(delta) < 0.05f) {
 						indexToMove = i;
 
 						std::fill(cp->cpuGeom.cols.begin(), cp->cpuGeom.cols.end(), glm::vec3(1.0f, 0.0f, 0.0f));
@@ -204,7 +210,8 @@ public:
 					movingPointIndex = indexToMove;
 				}
 				cp->needsUpdate = true;
-			} else if (action == GLFW_RELEASE) {
+			}
+			else if (action == GLFW_RELEASE) {
 				isDraggingControlPoint = false;
 				leftMouseDown = false;
 				movingPointIndex = -1;
@@ -215,47 +222,46 @@ public:
 			if (action == GLFW_PRESS)			middleMouseDown = true;
 			else if (action == GLFW_RELEASE)	middleMouseDown = false;
 		}
-    }
+	}
 
-    virtual void cursorPosCallback(double xpos, double ypos) {
+	virtual void cursorPosCallback(double xpos, double ypos) {
 		float screenX = ((mouseOldX / screenWidth) * 2.0) - 1.0;
 		float screenY = 1.0 - ((mouseOldY / screenHeight) * 2.0);
 
-		// if (mode == 0) {
-			if (rightMouseDown) {
-				camera.incrementTheta(ypos - mouseOldY);
-				camera.incrementPhi(xpos - mouseOldX);
-			}
-			if (middleMouseDown) {
-				float deltaX = xpos - mouseOldX;
-				float deltaY = ypos - mouseOldY;
-				camera.pan(deltaX, deltaY, screenWidth, screenHeight);
-			}
+		if (rightMouseDown) {
+			camera.incrementTheta(ypos - mouseOldY);
+			camera.incrementPhi(xpos - mouseOldX);
+		}
+		if (middleMouseDown) {
+			float deltaX = xpos - mouseOldX;
+			float deltaY = ypos - mouseOldY;
+			camera.pan(deltaX, deltaY, screenWidth, screenHeight);
+		}
 
-			if (isDraggingControlPoint) {
-				Frame localFrame = camera.getFrame();
+		if (isDraggingControlPoint) {
+			Frame localFrame = camera.getFrame();
 
-				float deltaX = xpos - mouseOldX;
-				float deltaY = ypos - mouseOldY;
+			float deltaX = xpos - mouseOldX;
+			float deltaY = ypos - mouseOldY;
 
-				float ndx = deltaX / (float) screenWidth;
-				float ndy = deltaY / (float) screenHeight;
+			float ndx = deltaX / (float)screenWidth;
+			float ndy = deltaY / (float)screenHeight;
 
-				float distance = glm::length(controlPointPos - camera.getPos());
+			float distance = glm::length(controlPointPos - camera.getPos());
 
-				float scale = 2.0f * distance * tan(glm::radians(45.0f) * 0.5f); // Use actual camera FOV here if available
+			float scale = 2.0f * distance * tan(glm::radians(45.0f) * 0.5f); // Use actual camera FOV here if available
 
-				glm::vec3 offset = ndx * scale * aspect * localFrame.u - ndy * scale * localFrame.v;
+			glm::vec3 offset = ndx * scale * aspect * localFrame.u - ndy * scale * localFrame.v;
 
-				controlPointPos += offset;
-				controlPointPosUpdated = true;
-			}
+			controlPointPos += offset;
+			controlPointPosUpdated = true;
+		}
 		// }
 		// else if (mode == 1) {
-			if (leftMouseDown && movingPointIndex != -1) {
-				//Update point at index i
-				cp->cpuGeom.verts[movingPointIndex] = glm::vec3(screenX, screenY, 0.f);
-				cp->needsUpdate = true;
+		if (leftMouseDown && movingPointIndex != -1) {
+			//Update point at index i
+			cp->cpuGeom.verts[movingPointIndex] = glm::vec3(screenX, screenY, 0.f);
+			cp->needsUpdate = true;
 			// }
 		}
 
@@ -294,7 +300,20 @@ public:
 	}
 
 	void viewPipelineControlPoints(ShaderProgram& sp) {
-		glm::mat4 M = glm::mat4(1.0);
+		glm::mat4 M = glm::mat4(1.0f);
+		glm::mat4 V = camera.getView();
+		glm::mat4 P = glm::perspective(glm::radians(45.0f), aspect, 0.01f, 1000.f);
+
+		GLint uniMat = glGetUniformLocation(sp, "M");
+		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(M));
+		uniMat = glGetUniformLocation(sp, "V");
+		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(V));
+		uniMat = glGetUniformLocation(sp, "P");
+		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(P));
+	}
+
+	void viewPipelinePlantPreview(ShaderProgram& sp, glm::mat4& modelMatrix) {
+		glm::mat4 M = modelMatrix;
 		glm::mat4 V = camera.getView();
 		glm::mat4 P = glm::perspective(glm::radians(45.0f), aspect, 0.01f, 1000.f);
 
@@ -318,6 +337,7 @@ public:
 		uniMat = glGetUniformLocation(sp, "P");
 		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(P));
 	}
+	
 
 	void updateShadingUniforms(
 		const glm::vec3& lightPos, const glm::vec3& lightCol,
@@ -353,6 +373,8 @@ public:
 
 	bool isDraggingControlPoint = false;
 	bool controlPointPosUpdated = false;
+	bool previewingPart = false;
+	bool previewingPlant = false;
 	glm::vec3 controlPointPos;
 
 	int mode;
@@ -411,6 +433,7 @@ private:
 
 std::vector<double> getKnotSequence(int k, int m);
 void previewPlantPart(std::shared_ptr<Callbacks3D> cb, PlantPart& part, ShaderProgram& cpShader);
+void previewPlant(std::shared_ptr<Callbacks3D> cb, Plant& plant, ShaderProgram& cpShader);
 
 glm::vec3 E_delta_1(const std::vector<glm::vec3>& ctrlPts, const std::vector<float>& weights, const std::vector<double>& U, float u, int k, int m);
 
@@ -419,7 +442,7 @@ void updateBSpline(PointsData& controlPoints, std::vector<glm::vec3>& bSpline) {
 	if (size > 1) {
 		int k = size == 2 ? 2 : 3;
 		int m = size - 1;
-		float uStep = 0.05f;
+		float uStep = 0.02f;
 
 		std::vector<double> knotSequence = getKnotSequence(k, m);
 
@@ -435,15 +458,65 @@ void updateBSpline(PointsData& controlPoints, std::vector<glm::vec3>& bSpline) {
 }
 
 void handleEditingMode(std::shared_ptr<Callbacks3D> cb, std::vector<Plant>& plants, ShaderProgram& editingShader, ShaderProgram& cpShader) {
+
+	glEnable(GL_LINE_SMOOTH);
+	glEnable(GL_FRAMEBUFFER_SRGB);
+	glEnable(GL_DEPTH_TEST);
 	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	editingShader.use();
-	cb->viewPipelineEditing(editingShader);
-
 	static int selectedPlantIndex = -1;
 	static int selectedPartIndex = -1;
-	static bool previewing = false;
+	static bool previewingPart = false;
+	static bool previewingPlant = false;
+
+	if (!previewingPlant && !previewingPart) {
+		// Draw X, Y axes with different colors
+		std::vector<glm::vec3> axisVerts = {
+			glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), // X-axis
+			glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), // Y-axis
+		};
+
+		std::vector<glm::vec3> axisColors = {
+			glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), // Red for X-axis
+			glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), // Green for Y-axis
+		};
+
+		editingShader.use();
+		cb->viewPipelineEditing(editingShader);
+
+		GPU_Geometry axisGeom;
+		axisGeom.setVerts(axisVerts);
+		axisGeom.setCols(axisColors);
+		axisGeom.bind();
+		glLineWidth(2.0f);
+		glDrawArrays(GL_LINES, 0, axisVerts.size());
+
+
+		if (selectedPlantIndex >= 0 && selectedPartIndex >= 0) {
+			auto& selectedPart = plants[selectedPlantIndex].parts[selectedPartIndex];
+
+			GPU_Geometry gpuGeom;
+
+			gpuGeom.setVerts(selectedPart.leftCurve);
+			gpuGeom.setCols(std::vector<glm::vec3>(selectedPart.leftCurve.size(), glm::vec3(1.0f, 0.0f, 0.0f)));
+			gpuGeom.bind();
+			glDrawArrays(GL_LINE_STRIP, 0, selectedPart.leftCurve.size());
+
+			gpuGeom.setVerts(selectedPart.rightCurve);
+			gpuGeom.setCols(std::vector<glm::vec3>(selectedPart.rightCurve.size(), glm::vec3(0.0f, 0.0f, 1.0f)));
+			gpuGeom.bind();
+			glDrawArrays(GL_LINE_STRIP, 0, selectedPart.rightCurve.size());
+
+			gpuGeom.setVerts(selectedPart.crossSectionCurve);
+			gpuGeom.setCols(std::vector<glm::vec3>(selectedPart.crossSectionCurve.size(), glm::vec3(0.0f, 0.0f, 1.0f)));
+			gpuGeom.bind();
+			glDrawArrays(GL_LINE_STRIP, 0, selectedPart.crossSectionCurve.size());
+
+			glDisable(GL_FRAMEBUFFER_SRGB); // disable sRGB for things like imgui
+		}
+		
+	}
 
 	if (ImGui::BeginCombo("Plants", selectedPlantIndex >= 0 ? plants[selectedPlantIndex].name.c_str() : "Select a Plant")) {
 		for (int i = 0; i < plants.size(); ++i) {
@@ -514,7 +587,7 @@ void handleEditingMode(std::shared_ptr<Callbacks3D> cb, std::vector<Plant>& plan
 
 			if (strlen(partName) > 0 && selectedPlantIndex < plants.size()) {
 				auto& parts = plants[selectedPlantIndex].parts;
-				
+
 				std::cout << "Checking for existing part names..." << std::endl;
 				for (auto& part : parts) {
 					if (part.name == partName) {
@@ -531,15 +604,17 @@ void handleEditingMode(std::shared_ptr<Callbacks3D> cb, std::vector<Plant>& plan
 		}
 	}
 
-	if (selectedPlantIndex >= 0 && selectedPartIndex >= 0) {
+	if (selectedPlantIndex >= 0 && selectedPartIndex >= 0 && !previewingPlant && !previewingPart) {
 		auto& selectedPart = plants[selectedPlantIndex].parts[selectedPartIndex];
 
 		ImGui::Dummy(ImVec2(0.0f, 10.0f));
 		ImGui::Text("-------------------------------");
 		ImGui::Text("Editing Part: %s", plants[selectedPlantIndex].parts[selectedPartIndex].name.c_str());
 		if (ImGui::Button("Clear")) {
-			previewing = false;
-			
+			previewingPlant = false;
+			previewingPart = false;
+			cb->setEditingControlPoint(nullptr);
+
 			selectedPart.leftControlPoints.clear();
 			selectedPart.rightControlPoints.clear();
 			selectedPart.crossSectionControlPoints.clear();
@@ -560,7 +635,7 @@ void handleEditingMode(std::shared_ptr<Callbacks3D> cb, std::vector<Plant>& plan
 		static bool showCrossSection = false;
 
 		ImGui::Checkbox("Left Curve", &showLeftCurve);
-		if (showLeftCurve && !previewing) {
+		if (showLeftCurve && !previewingPart && !previewingPlant) {
 			cb->setEditingControlPoint(&selectedPart.leftControlPoints);
 
 			int index = -1;
@@ -588,12 +663,6 @@ void handleEditingMode(std::shared_ptr<Callbacks3D> cb, std::vector<Plant>& plan
 			showRightCurve = false;
 			showCrossSection = false;
 
-			glEnable(GL_LINE_SMOOTH);
-			glEnable(GL_FRAMEBUFFER_SRGB);
-			glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			glEnable(GL_DEPTH_TEST);
-			
 			GPU_Geometry gpuGeom;
 			gpuGeom.setVerts(selectedPart.leftControlPoints.cpuGeom.verts);
 			gpuGeom.setCols(selectedPart.leftControlPoints.cpuGeom.cols);
@@ -605,17 +674,11 @@ void handleEditingMode(std::shared_ptr<Callbacks3D> cb, std::vector<Plant>& plan
 			glPointSize(10);
 			glDrawArrays(GL_POINTS, 0, selectedPart.leftControlPoints.cpuGeom.verts.size());
 
-			gpuGeom.setVerts(selectedPart.leftCurve);
-			gpuGeom.setCols(std::vector<glm::vec3>(selectedPart.leftCurve.size(), glm::vec3(0.0f, 0.0f, 0.0f)));
-			gpuGeom.bind();
-
-			glDrawArrays(GL_LINE_STRIP, 0, selectedPart.leftCurve.size());
-
 			glDisable(GL_FRAMEBUFFER_SRGB); // disable sRGB for things like imgui
 		}
-	
+
 		ImGui::Checkbox("Right Curve", &showRightCurve);
-		if (showRightCurve && !previewing) {
+		if (showRightCurve && !previewingPart && !previewingPlant) {
 			cb->setEditingControlPoint(&selectedPart.rightControlPoints);
 
 			int index = -1;
@@ -643,12 +706,6 @@ void handleEditingMode(std::shared_ptr<Callbacks3D> cb, std::vector<Plant>& plan
 			showLeftCurve = false;
 			showCrossSection = false;
 
-			glEnable(GL_LINE_SMOOTH);
-			glEnable(GL_FRAMEBUFFER_SRGB);
-			glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			glEnable(GL_DEPTH_TEST);
-
 			GPU_Geometry gpuGeom;
 			gpuGeom.setVerts(selectedPart.rightControlPoints.cpuGeom.verts);
 			gpuGeom.setCols(selectedPart.rightControlPoints.cpuGeom.cols);
@@ -660,16 +717,11 @@ void handleEditingMode(std::shared_ptr<Callbacks3D> cb, std::vector<Plant>& plan
 			glPointSize(10);
 			glDrawArrays(GL_POINTS, 0, selectedPart.rightControlPoints.cpuGeom.verts.size());
 
-			gpuGeom.setVerts(selectedPart.rightCurve);
-			gpuGeom.setCols(std::vector<glm::vec3>(selectedPart.rightCurve.size(), glm::vec3(0.0f, 0.0f, 0.0f)));
-			gpuGeom.bind();
-			glDrawArrays(GL_LINE_STRIP, 0, selectedPart.rightCurve.size());
-
 			glDisable(GL_FRAMEBUFFER_SRGB); // disable sRGB for things like imgui
 		}
-	
+
 		ImGui::Checkbox("Cross Section", &showCrossSection);
-		if (showCrossSection && !previewing) {
+		if (showCrossSection && !previewingPart && !previewingPlant) {
 			cb->setEditingControlPoint(&selectedPart.crossSectionControlPoints);
 
 			int index = -1;
@@ -697,12 +749,6 @@ void handleEditingMode(std::shared_ptr<Callbacks3D> cb, std::vector<Plant>& plan
 			showLeftCurve = false;
 			showRightCurve = false;
 
-			glEnable(GL_LINE_SMOOTH);
-			glEnable(GL_FRAMEBUFFER_SRGB);
-			glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-			glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-			glEnable(GL_DEPTH_TEST);
-
 			GPU_Geometry gpuGeom;
 			gpuGeom.setVerts(selectedPart.crossSectionControlPoints.cpuGeom.verts);
 			gpuGeom.setCols(selectedPart.crossSectionControlPoints.cpuGeom.cols);
@@ -714,165 +760,192 @@ void handleEditingMode(std::shared_ptr<Callbacks3D> cb, std::vector<Plant>& plan
 			glPointSize(10);
 			glDrawArrays(GL_POINTS, 0, selectedPart.crossSectionControlPoints.cpuGeom.verts.size());
 
-			gpuGeom.setVerts(selectedPart.crossSectionCurve);
-			gpuGeom.setCols(std::vector<glm::vec3>(selectedPart.crossSectionCurve.size(), glm::vec3(0.0f, 0.0f, 0.0f)));
-			gpuGeom.bind();
-			glDrawArrays(GL_LINE_STRIP, 0, selectedPart.crossSectionCurve.size());
-
 			glDisable(GL_FRAMEBUFFER_SRGB); // disable sRGB for things like imgui
 		}
 
 		ImGui::Dummy(ImVec2(0.0f, 10.0f));
 		ImGui::Text("Transformations");
-		ImGui::DragFloat3("Scale", glm::value_ptr(plants[selectedPlantIndex].parts[selectedPartIndex].scale), 0.01f, 0.1f, 10.0f);
-		ImGui::DragFloat3("Translation", glm::value_ptr(plants[selectedPlantIndex].parts[selectedPartIndex].translation), 0.01f, -10.0f, 10.0f);
-		ImGui::DragFloat3("Rotation (degrees)", glm::value_ptr(plants[selectedPlantIndex].parts[selectedPartIndex].rotation), 1.0f, -360.0f, 360.0f);
+		ImGui::DragFloat3("Scale", glm::value_ptr(plants[selectedPlantIndex].parts[selectedPartIndex].scale), 0.1f, 0.1f, 10.0f);
+		ImGui::DragFloat3("Translation", glm::value_ptr(plants[selectedPlantIndex].parts[selectedPartIndex].translation), 0.1f, -10.0f, 10.0f);
+		ImGui::DragFloat3("Rotation (degrees)", glm::value_ptr(plants[selectedPlantIndex].parts[selectedPartIndex].rotation), 0.1f, -180.0f, 180.0f);
 
-		if (previewing) {
-			previewPlantPart(cb, plants[selectedPlantIndex].parts[selectedPartIndex], cpShader);
-			if (ImGui::Button("Edit Surface")) {
-				previewing = false;
-				cb->setEditingControlPoint(nullptr);
-			}
-		}
-		else if (ImGui::Button("Preview Surface")) {
+		if (ImGui::Button("Preview Part")) {
 			// Error checking: Ensure all three curves are set
 			if (selectedPart.leftCurve.empty() || selectedPart.rightCurve.empty() || selectedPart.crossSectionCurve.empty()) {
 				std::cout << "Error: All three curves (left, right, cross-section) must be set before calculating the surface." << std::endl;
-			} else {
+			}
+			else {
 				if (selectedPart.leftCurve.size() != selectedPart.rightCurve.size()) {
 					std::cout << "Error: Left and Right curves must have the same number of points." << std::endl;
 				}
 				else {
-					std::cout << "Surface previewing..." << selectedPart.name << std::endl;
+					std::cout << "Part previewing..." << selectedPart.name << std::endl;
 
 					showLeftCurve = false;
 					showRightCurve = false;
 					showCrossSection = false;
 
-					previewing = true;
-					previewPlantPart(cb, plants[selectedPlantIndex].parts[selectedPartIndex], cpShader);
+					previewingPart = true;
+					cb->previewingPart = true;
+					cb->setEditingControlPoint(nullptr);
 				}
 			}
+		}
+
+		if (ImGui::Button("Preview Plant")) {
+
+			for (auto& part : plants[selectedPlantIndex].parts) {
+				if (part.leftCurve.empty() || part.rightCurve.empty() || part.crossSectionCurve.empty()) {
+					std::cout << "Error: All three curves (left, right, cross-section) must be set before calculating the surface." << std::endl;
+					return;
+				}
+				if (part.leftCurve.size() != part.rightCurve.size()) {
+					std::cout << "Error: All left and right curve sizes must be equal" << std::endl;
+				}
+			}
+			
+			std::cout << "Plant previewing..." << selectedPart.name << std::endl;
+
+			showLeftCurve = false;
+			showRightCurve = false;
+			showCrossSection = false;
+
+			previewingPlant = true;
+			cb->previewingPart = true;
+			cb->setEditingControlPoint(nullptr);
+		}
+	}
+
+	if (previewingPart) {
+		previewPlantPart(cb, plants[selectedPlantIndex].parts[selectedPartIndex], cpShader);
+		if (ImGui::Button("Edit Surface")) {
+			previewingPart = false;
+			cb->previewingPart = false;
+		}
+	} else if (previewingPlant) {
+		previewPlant(cb, plants[selectedPlantIndex], cpShader);
+		if (ImGui::Button("Edit Surface")) {
+			previewingPlant = false;
+			cb->previewingPlant = false;
 		}
 	}
 }
 
+std::vector<glm::vec3> generatePlantPart(PlantPart& part) {
+    std::vector<glm::vec3> surface;
+
+    std::vector<glm::dvec3> transformedCurve(part.crossSectionCurve.begin(), part.crossSectionCurve.end());
+    glm::dvec3 startPoint = transformedCurve.front();
+    glm::dvec3 endPoint = transformedCurve.back();
+    glm::dvec3 midpoint = (startPoint + endPoint) * 0.5;
+
+    glm::dmat4 translationMatrix = glm::translate(glm::dmat4(1.0), -midpoint);
+    for (auto& point : transformedCurve) {
+        glm::dvec4 translatedPoint = translationMatrix * glm::dvec4(point, 1.0);
+        point = glm::dvec3(translatedPoint);
+    }
+
+    // Recalculate start and end points after translation
+    startPoint = transformedCurve.front();
+    endPoint = transformedCurve.back();
+
+    glm::dvec3 direction = glm::normalize(endPoint - startPoint);
+    glm::dvec3 xAxis(1.0, 0.0, 0.0);
+    double angle = acos(glm::clamp(glm::dot(direction, xAxis), -1.0, 1.0));
+
+    // Rotate the curve around the z-axis and x-axis
+    glm::dmat4 rotationMatrix = glm::rotate(glm::dmat4(1.0), angle, glm::dvec3(0.0, 0.0, 1.0));
+    rotationMatrix = glm::rotate(glm::dmat4(1.0), glm::radians(-90.0), xAxis) * rotationMatrix;
+    for (auto& point : transformedCurve) {
+        glm::dvec4 rotatedPoint = rotationMatrix * glm::dvec4(point, 1.0);
+        point = glm::dvec3(rotatedPoint);
+    }
+
+    startPoint = transformedCurve.front();
+    endPoint = transformedCurve.back();
+    double length = glm::length(endPoint - startPoint);
+    if (length > 1e-4) {
+        double scaleFactor = 1.0 / length;
+
+        glm::dmat4 scaleMatrix = glm::scale(glm::dmat4(1.0), glm::dvec3(scaleFactor));
+        for (auto& point : transformedCurve) {
+            glm::dvec4 scaledPoint = scaleMatrix * glm::dvec4(point, 1.0);
+            point = glm::dvec3(scaledPoint);
+        }
+
+        int index = transformedCurve.size() - 1;
+        std::vector<glm::dvec3> reflectedPoints;
+        for (size_t i = 1; i < transformedCurve.size() - 1; ++i) {
+            glm::dvec3 reflectedPoint = transformedCurve[i];
+            reflectedPoint.z = -reflectedPoint.z;
+            reflectedPoints.push_back(reflectedPoint);
+        }
+        transformedCurve.insert(transformedCurve.end(), reflectedPoints.rbegin(), reflectedPoints.rend());
+
+        std::vector<std::vector<glm::dvec3>> surfaceStrips;
+
+        for (int i = 0; i < part.leftCurve.size(); ++i) {
+            glm::dvec3 ql = part.leftCurve[i];
+            glm::dvec3 qr = part.rightCurve[i];
+            glm::dvec3 axis = qr - ql;
+            glm::dvec3 mid = (ql + qr) * 0.5;
+
+            glm::dvec3 axisDir = glm::normalize(axis);
+            double angle = acos(glm::clamp(glm::dot(glm::dvec3(1.0, 0.0, 0.0), axisDir), -1.0, 1.0));
+
+            glm::dmat4 transform = glm::translate(glm::dmat4(1.0), mid)
+                * glm::rotate(glm::dmat4(1.0), -angle, glm::dvec3(0.0, 0.0, 1.0))
+                * glm::scale(glm::dmat4(1.0), glm::dvec3(glm::length(axis)));
+
+            std::vector<glm::dvec3> strip;
+
+            for (const auto& pt : transformedCurve) {
+                glm::dvec4 transformed = transform * glm::dvec4(pt, 1.0);
+                strip.push_back(glm::dvec3(transformed));
+            }
+
+            surfaceStrips.push_back(strip);
+        }
+
+        int N = surfaceStrips.size();
+        int M = transformedCurve.size();
+
+        for (int i = 0; i < N - 1; ++i) {
+            for (int j = 0; j < M; ++j) {
+                glm::dvec3 v0 = surfaceStrips[i][j];
+                glm::dvec3 v1 = surfaceStrips[i + 1][j];
+                glm::dvec3 v2 = surfaceStrips[i][(j + 1) % M];
+                glm::dvec3 v3 = surfaceStrips[i + 1][(j + 1) % M];
+
+                surface.push_back(glm::vec3(v0));
+                surface.push_back(glm::vec3(v1));
+                surface.push_back(glm::vec3(v2));
+                surface.push_back(glm::vec3(v2));
+                surface.push_back(glm::vec3(v1));
+                surface.push_back(glm::vec3(v3));
+            }
+        }
+        return surface;
+    }
+    std::cout << "Error: Cross section not set up correctly" << std::endl;
+
+    return surface;
+}
+
 void previewPlantPart(std::shared_ptr<Callbacks3D> cb, PlantPart& part, ShaderProgram& cpShader) {
-	// Calculate the vector from the first point to the last point
-
-	// if (part.needsUpdate) {
-		std::vector<glm::vec3> transformedCurve = part.crossSectionCurve;
-		glm::vec3 startPoint = transformedCurve.front();
-		glm::vec3 endPoint = transformedCurve.back();
-		glm::vec3 direction = glm::normalize(endPoint - startPoint);
 	
-		// Define the x-axis vector
-		glm::vec3 xAxis(1.0f, 0.0f, 0.0f);
-	
-		// Calculate the angle between the direction vector and the x-axis
-		float angle = acos(glm::dot(direction, xAxis));
-	
-		// Determine the sign of the angle using the cross product
-		glm::vec3 crossProduct = glm::cross(direction, xAxis);
-		if (crossProduct.z < 0) {
-			angle = -angle;
-		}
-	
-		// Create a rotation matrix to align the curve to the x-axis
-		glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 0.0f, 1.0f));
-	
-		// Apply the rotation to all points in the transformed curve
-		for (auto& point : transformedCurve) {
-			glm::vec4 rotatedPoint = rotationMatrix * glm::vec4(point, 1.0f);
-			point = glm::vec3(rotatedPoint);
-		}
+	part.surface = generatePlantPart(part);
 
-		part.needsUpdate = false;
-	// }
-
-	float offsetY = -transformedCurve.front().y;
-	float firstPointX = transformedCurve.front().x;
-	float lastPointX = transformedCurve.back().x;
-	float centerOffsetX = (firstPointX + lastPointX) / 2.0f;
-
-	for (auto& point : transformedCurve) {
-		point.x -= centerOffsetX;
-		point.y += offsetY;
-		point = glm::vec3(point.x, point.z, point.y);
-	}
-
-	std::vector<glm::vec3> reflectedPoints;
-	for (size_t i = 1; i < transformedCurve.size() - 1; ++i) {
-		glm::vec3 reflectedPoint = transformedCurve[i];
-		reflectedPoint.z = -reflectedPoint.z;
-		reflectedPoints.push_back(reflectedPoint);
-	}
-
-	// Add the reflected points to the transformed curve
-	transformedCurve.insert(transformedCurve.end(), reflectedPoints.rbegin(), reflectedPoints.rend());
-
-
-	std::vector<std::vector<glm::vec3>> surfaceStrips;
-
-	for (int i = 0; i < part.leftCurve.size(); ++i) {
-		glm::vec3 ql = part.leftCurve[i];
-		glm::vec3 qr = part.rightCurve[i];
-		glm::vec3 axis = qr - ql;
-		glm::vec3 mid = (ql + qr) * 0.5f;
-
-		glm::vec3 xAxis(1, 0, 0);
-		glm::vec3 axisDir = glm::normalize(axis);
-		float angle = acos(glm::dot(xAxis, axisDir));
-
-		glm::vec3 rotationAxis = glm::vec3(0, 0, 1);
-
-		glm::mat4 transform = glm::translate(glm::mat4(1.0f), mid)
-							* glm::rotate(glm::mat4(1.0f), angle, rotationAxis)
-							* glm::scale(glm::mat4(1.0f), glm::vec3(glm::length(axis), glm::length(axis), glm::length(axis)));
-
-		std::vector<glm::vec3> strip;
-		for (const auto& pt : transformedCurve) {
-			glm::vec4 transformed = transform * glm::vec4(pt, 1.0f);
-			strip.push_back(glm::vec3(transformed));
-		}
-
-		surfaceStrips.push_back(strip);
-	}
-
-	part.surface.clear();
-
-	int N = surfaceStrips.size();
-	int M = transformedCurve.size();
-	
-	for (int i = 0; i < N - 1; ++i) {
-		for (int j = 0; j < M; ++j) {
-			glm::vec3 v0 = surfaceStrips[i][j];
-			glm::vec3 v1 = surfaceStrips[i + 1][j];
-			glm::vec3 v2 = surfaceStrips[i][(j + 1) % M];
-			glm::vec3 v3 = surfaceStrips[i + 1][(j + 1) % M];
-
-			part.surface.push_back(v0);
-			part.surface.push_back(v1);
-			part.surface.push_back(v2);
-
-			part.surface.push_back(v2);
-			part.surface.push_back(v1);
-			part.surface.push_back(v3);
-		}
-	}
-	
-	// Draw X, Y, Z axes with different colors
 	std::vector<glm::vec3> axisVerts = {
-		glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(10.0f, 0.0f, 0.0f), // X-axis
-		glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 10.0f, 0.0f), // Y-axis
-		glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 10.0f)  // Z-axis
+	glm::vec3(0.0f), glm::vec3(1.0f, 0.0f, 0.0f),
+	glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+	glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f)
 	};
 
 	std::vector<glm::vec3> axisColors = {
-		glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), // Red for X-axis
-		glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), // Green for Y-axis
-		glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 1.0f)  // Blue for Z-axis
+		glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+		glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 1.0f)
 	};
 
 	GPU_Geometry axisGeom;
@@ -887,13 +960,60 @@ void previewPlantPart(std::shared_ptr<Callbacks3D> cb, PlantPart& part, ShaderPr
 
 	GPU_Geometry gpuGeom;
 	gpuGeom.setVerts(part.surface);
-	gpuGeom.setCols(std::vector<glm::vec3>(part.surface.size(), glm::vec3(0.0f, 0.0f, 0.0f)));
+	gpuGeom.setCols(std::vector<glm::vec3>(part.surface.size(), glm::vec3(0.0f)));
 	gpuGeom.bind();
 
 	cpShader.use();
 	cb->viewPipelineControlPoints(cpShader);
-	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE); // Ensure the surface is drawn as wireframe
+	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 	glDrawArrays(GL_LINE_STRIP, 0, part.surface.size());
+}
+
+void previewPlant(std::shared_ptr<Callbacks3D> cb, Plant& plant, ShaderProgram& cpShader) {
+
+	std::vector<glm::vec3> axisVerts = {
+		glm::vec3(0.0f), glm::vec3(1.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+		glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f)
+	};
+
+	std::vector<glm::vec3> axisColors = {
+		glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+		glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 1.0f)
+	};
+
+	GPU_Geometry axisGeom;
+	axisGeom.setVerts(axisVerts);
+	axisGeom.setCols(axisColors);
+	axisGeom.bind();
+
+	cpShader.use();
+	cb->viewPipelineControlPoints(cpShader);
+	glLineWidth(2.0f);
+	glDrawArrays(GL_LINES, 0, axisVerts.size());
+
+	for (auto& part : plant.parts) {
+		part.surface = generatePlantPart(part);
+
+		glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), part.rotation.z, glm::vec3(0.0f, 0.0f, 1.0f))
+			* glm::rotate(glm::mat4(1.0f), part.rotation.x, glm::vec3(1.0f, 0.0f, 0.0f))
+			* glm::rotate(glm::mat4(1.0f), part.rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+
+		part.partMatrix = glm::translate(glm::mat4(1.0f), part.translation)
+			* rotationMatrix
+			* glm::scale(glm::mat4(1.0f), glm::vec3(part.scale));;
+
+		GPU_Geometry gpuGeom;
+		gpuGeom.setVerts(part.surface);
+		gpuGeom.setCols(std::vector<glm::vec3>(part.surface.size(), glm::vec3(0.0f)));
+		gpuGeom.bind();
+		
+		cpShader.use();
+		cb->viewPipelinePlantPreview(cpShader, part.partMatrix);
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		glDrawArrays(GL_LINE_STRIP, 0, part.surface.size());
+	}
 }
 
 void handleDraggingControlPoint(std::shared_ptr<Callbacks3D> cb, int& index, CPU_Geometry& controlPointsCPU, GPU_Geometry& controlPointsGPU, ShaderProgram& pickerShader, Window& window, Surface& splineSurface, std::vector<glm::vec3>& flatControlPoints) {
@@ -1037,7 +1157,7 @@ int main() {
 
 	// WINDOW
 	glfwInit();
-	Window window(800, 800, "CPSC 589/689"); // could set callbacks at construction if desired
+	Window window(1200, 1200, "CPSC 589/689"); // could set callbacks at construction if desired
 
 	//GLDebug::enable();
 
@@ -1096,11 +1216,11 @@ int main() {
 	std::vector<Plant> plants;
 
 	// Create an orange object
-	Plant orange("Orange");
-	PlantPart orangePart("OrangePart");
+	Plant plant("Plant");
+	PlantPart orangePart("PlantPart");
 
-	orange.addPart(orangePart);
-	plants.push_back(orange);
+	plant.addPart(orangePart);
+	plants.push_back(plant);
 
 	// RENDER LOOP
 	while (!window.shouldClose()) {
@@ -1157,8 +1277,9 @@ int main() {
 
 			ImGui::End();
 			ImGui::Render();
-		} else {
-		
+		}
+		else {
+
 			ImGui::End();
 			ImGui::Render();
 

@@ -18,6 +18,7 @@
 #include "Camera.h"
 #include "Framebuffer.h"
 #include "Renderbuffer.h"
+#include "Scene.h"
 //#include "Plant.h"
 //#include "PlantPart.h"
 
@@ -1172,6 +1173,15 @@ int main() {
 	window.setCallbacks(cb);
 
 	window.setupImGui(); // Make sure this call comes AFTER GLFW callbacks set.
+
+	std::unordered_map<std::string, ShaderProgram*> shaders = {
+		{"default", &shader},
+		{"controlPoint", &cpShader},
+		{"picker", &pickerShader},
+		{"editing", &editingShader}
+	};
+
+	Scene scene(window, callbacks, panel, shaders);
 
 	// Tensor surface
 	Surface splineSurface(5, 3, 3, 20, 20); // 5x5 grid, degree 3, resolution 50x50

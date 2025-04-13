@@ -124,7 +124,7 @@ foreach(file ${files_m})
 	configure_file(${file} models/${fileName} COPYONLY)
 endforeach()
 
-add_executable(${APP_NAME} ${SOURCES} "589-689-skeleton/Framebuffer.cpp" "589-689-skeleton/Framebuffer.h" "589-689-skeleton/Renderbuffer.cpp" "589-689-skeleton/Plant.cpp" "589-689-skeleton/Plant.h" "589-689-skeleton/PlantPart.cpp" "589-689-skeleton/PlantPart.h")
+add_executable(${APP_NAME} ${SOURCES} "589-689-skeleton/Framebuffer.cpp" "589-689-skeleton/Framebuffer.h" "589-689-skeleton/Renderbuffer.cpp" "589-689-skeleton/Plant.cpp" "589-689-skeleton/Plant.h" "589-689-skeleton/PlantPart.cpp" "589-689-skeleton/PlantPart.h" "589-689-skeleton/Callback.h" "589-689-skeleton/PointsData.h")
 target_include_directories(${APP_NAME} PRIVATE ${INCLUDES})
 target_link_libraries(${APP_NAME} ${LIBRARIES})
 target_compile_definitions(${APP_NAME} PRIVATE ${DEFINITIONS})

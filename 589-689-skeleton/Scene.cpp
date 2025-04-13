@@ -1,88 +1,5 @@
 #include "Scene.h"
 
-void Scene::initializeControlPoints() {
-	// Resize control points and colors to match the number of control points in U
-	controlPoints.resize(numCtrlPtsU);
-	controlPointColors.resize(numCtrlPtsU);
-
-	float spacing = 1.0f; // Space between control points
-
-	// Calculate offsets to center the control points on the origin
-	float offsetX = (numCtrlPtsU - 1) * spacing / 2.0f;
-	float offsetZ = (numCtrlPtsV - 1) * spacing / 2.0f;
-
-	// Initialize control points and their colors
-	for (int i = 0; i < numCtrlPtsU; ++i) {
-		controlPoints[i].resize(numCtrlPtsV);
-		controlPointColors[i].resize(numCtrlPtsV);
-
-		for (int j = 0; j < numCtrlPtsV; ++j) {
-			// Set control point position on the xz plane, centered at the origin
-			controlPoints[i][j] = glm::vec3(i * spacing - offsetX, 0.0f, j * spacing - offsetZ);
-		}
-	}
-
-	// Generate open uniform knot vectors
-	knotU.clear();
-	knotV.clear();
-
-	int nU = numCtrlPtsU - 1;
-	int nV = numCtrlPtsV - 1;
-
-	int mU = nU + degreeU + 1;
-	int mV = nV + degreeV + 1;
-
-	// Generate knot vector for U
-	for (int i = 0; i <= mU; ++i) {
-		if (i < degreeU) {
-			knotU.push_back(0.0f);
-		}
-		else if (i <= nU) {
-			knotU.push_back((float)(i - degreeU) / (nU - degreeU + 1));
-		}
-		else {
-			knotU.push_back(1.0f);
-		}
-	}
-
-	// Generate knot vector for V
-	for (int i = 0; i <= mV; ++i) {
-		if (i < degreeV) {
-			knotV.push_back(0.0f);
-		}
-		else if (i <= nV) {
-			knotV.push_back((float)(i - degreeV) / (nV - degreeV + 1));
-		}
-		else {
-			knotV.push_back(1.0f);
-		}
-	}
-
-	// Mark the surface as needing an update
-	surfaceNeedsUpdate = true;
-}
-
-void Scene::updateControlPointGeom(bool forPicking) {
-	std::vector<glm::vec3> verts;
-	std::vector<glm::vec3> cols;
-
-	for (int i = 0; i < numCtrlPtsU; ++i) {
-		for (int j = 0; j < numCtrlPtsV; ++j) {
-			verts.push_back(controlPoints[i][j]);
-			if (forPicking)
-				cols.push_back(controlPointColors[i][j]); // encode ID as color
-			else
-				cols.push_back(glm::vec3(1.0f, 0.0f, 0.0f)); // red for visualization
-		}
-	}
-
-	cp_gpu.setVerts(verts);
-	cp_gpu.setCols(cols);
-	cp_gpu.bind();
-
-	cp_cpu.verts = verts;
-}
-
 // Fix the issue by properly initializing the `pickerTex` object using its constructor instead of calling it like a function.
 void Scene::initializeGpuPicking() {
 	const glm::ivec2 fbSize = window.getFramebufferSize();
@@ -100,52 +17,797 @@ void Scene::initializeGpuPicking() {
 	}
 }
 
-void Scene::handleGpuPicking() {
+void Scene::setShader(ShaderType type)
+{
+	switch (type) {
+	case ShaderType::DEFAULT:
+		if (shaders.count("default")) {
+			activeShader = shaders.at("default");
+		}
+		break;
+	case ShaderType::CONTROL_POINTS:
+		if (shaders.count("controlPoint")) {
+			activeShader = shaders.at("controlPoint");
+		}
+		break;
+	case ShaderType::PICKER:
+		if (shaders.count("picker")) {
+			activeShader = shaders.at("picker");
+		}
+		break;
+	}
+}
+
+void Scene::initialize() {
+
+	initializeLandscape();
+
+	shaders.at("default")->use();
+	cb->updateShadingUniforms(lightPos, lightCol, diffuseCol, ambientStrength, false);
+
+	// Create an orange object
+	Plant plant("Plant");
+	PlantPart part("PlantPart");
+
+	plant.addPart(part);
+	plants.push_back(plant);
+}
+
+void Scene::initializeLandscape() {
+	landscape.generateSurface();
+	landscape.bind();
+}
+
+void Scene::handleGPUPickingLandscape() {
 	glEnable(GL_LINE_SMOOTH);
 	glEnable(GL_FRAMEBUFFER_SRGB);
 	glEnable(GL_DEPTH_TEST);
-
-	// Bind our new framebuffer.
-	pickerFB.bind();
-	// Integer textures don't support the dithering that's enabled by default.
-	// What is dithering? See: https://community.khronos.org/t/what-is-gl-dither/31034
 	glDisable(GL_DITHER);
 
-	// Because our framebuffer's an int framebuffer, we'll use glClearBufferiv
-	// to clear it instead of glClear
-	glClearBufferiv(GL_COLOR, 0, pickerClearValue);
-	// But we will use glClear for the depth.
-	glClear(GL_DEPTH_BUFFER_BIT);
+	glm::ivec2 pickPos = cb->getMousePos();
+	pickPos.y = window.getHeight() - pickPos.y;
 
-	// Hard-coded "cursor" position for initial testing.
-	const glm::ivec2 pickPos(200, 200);
+	GPU_Geometry gpuGeom;
+	std::vector<std::vector<glm::vec3>> cp = landscape.getControlGrid();
 
-	// Restrict the rendering region to the single pixel of interest.
-	// Not require, but *might* help efficiency.
-	glEnable(GL_SCISSOR_TEST);
-	glScissor(pickPos.x, pickPos.y, 1, 1);
+	std::vector<glm::vec3> flattenedControlPoints;
+	for (const auto& row : cp) {
+		flattenedControlPoints.insert(flattenedControlPoints.end(), row.begin(), row.end());
+	}
+	gpuGeom.setVerts(flattenedControlPoints);
 
-	// Activate the shader and set up the uniforms, then draw the model.
-	setShader(ShaderType::PICKER);
-	useShader();
-	cp_gpu.bind();
-	callbacks->viewPipelinePicker(*activeShader);
-	glDrawArrays(GL_TRIANGLES, 0, cp_cpu.verts.size());
+	// We'll draw each point one at a time
+	for (int i = 0; i < flattenedControlPoints.size(); ++i) {
+		pickerFB.bind();
+		glClearBufferiv(GL_COLOR, 0, pickerClearValue);
+		glClear(GL_DEPTH_BUFFER_BIT);
 
-	// Bind and read the rendered result from the texture.
-	pickerTex.bind();
-	GLint pickTexCPU[1];
-	// https://registry.khronos.org/OpenGL-Refpages/gl4/html/glReadPixels.xhtml
-	glReadPixels(pickPos.x, pickPos.y, 1, 1, GL_RED_INTEGER, GL_INT, pickTexCPU);
+		glEnable(GL_SCISSOR_TEST);
+		glScissor(pickPos.x, pickPos.y, 1, 1);
 
-	//std::cout << "Picked ID:" << pickTexCPU[0] << std::endl;
+		shaders.at("picker")->use();
+		cb->viewPipelinePicker();
 
-	// Binds the "0" default framebuffer, which we use for our visual result.
-	pickerFB.unbind();
+		gpuGeom.bind();
 
-	// Reset changed settings to default for the main visual render.
+		glPointSize(15);
+		glDrawArrays(GL_POINTS, i, 1);
+
+		GLint pickTexCPU[1];
+		pickerTex.bind();
+		glReadPixels(pickPos.x, pickPos.y, 1, 1, GL_RED_INTEGER, GL_INT, pickTexCPU);
+
+		pickerFB.unbind();
+		glDisable(GL_SCISSOR_TEST);
+
+		if (pickTexCPU[0] == 1) {
+			controlPointIndex = i;
+			landscape.updateControlPoint(i, cb->getDragOffset());
+			break;
+		}
+	}
 	glEnable(GL_DITHER);
-	glDisable(GL_SCISSOR_TEST);
 }
 
+void Scene::drawImGui() {
+	// Three functions that must be called each new frame.
+	ImGui_ImplOpenGL3_NewFrame();
+	ImGui_ImplGlfw_NewFrame();
+	ImGui::NewFrame();
 
+	ImGui::Begin("Preferences");
+
+	lighhtingChage |= ImGui::ColorEdit3("Diffuse colour", glm::value_ptr(diffuseCol));
+
+	// The rest of our ImGui widgets.
+	lighhtingChage |= ImGui::DragFloat3("Light's position", glm::value_ptr(lightPos));
+	lighhtingChage |= ImGui::ColorEdit3("Light's colour", glm::value_ptr(lightCol));
+	lighhtingChage |= ImGui::SliderFloat("Ambient strength", &ambientStrength, 0.0f, 1.f);
+	lighhtingChage |= ImGui::Checkbox("Simple wireframe", &simpleWireframe);
+
+	// Framerate display, in case you need to debug performance.
+	ImGui::Text("Average %.1f ms/frame (%.1f fps)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+
+	ImGui::Dummy(ImVec2(0.0f, 5.0f));
+	ImGui::Checkbox("3D Axes", &show3DAxes);
+
+	ImGui::Dummy(ImVec2(0.0f, 10.0f));
+	ImGui::Text("-------------------------------");
+	ImGui::Text("Mode");
+	if (ImGui::BeginCombo("##Mode", options[comboSelection])) {
+		for (int i = 0; i < 2; ++i) {
+			bool isSelected = (comboSelection == i);
+			if (ImGui::Selectable(options[i], isSelected)) {
+				comboSelection = i;
+				modeChanged = true;
+
+			}
+			if (isSelected) {
+				ImGui::SetItemDefaultFocus();
+			}
+		}
+		ImGui::EndCombo();
+	}
+	ImGui::Dummy(ImVec2(0.0f, 5.0f));
+
+	if (comboSelection == 0) {
+
+	}
+	else if (comboSelection == 1) {
+		drawEditingImGui();
+	}
+		
+	ImGui::End();
+	ImGui::Render();
+	
+	ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+}
+
+void Scene::drawEditingImGui() {
+	if (ImGui::BeginCombo("Plants", selectedPlantIndex >= 0 ? plants[selectedPlantIndex].getName().c_str() : "Select a Plant")) {
+		for (int i = 0; i < plants.size(); ++i) {
+			bool isSelected = (selectedPlantIndex == i);
+			if (ImGui::Selectable(plants[i].getName().c_str(), isSelected)) {
+				selectedPlantIndex = i;
+				selectedPartIndex = -1;
+			}
+			if (isSelected) {
+				ImGui::SetItemDefaultFocus();
+			}
+		}
+		ImGui::EndCombo();
+	}
+	if (ImGui::Button("Delete Plant")) {
+		if (!plants.empty() && selectedPlantIndex < plants.size()) {
+			plants.erase(plants.begin() + selectedPlantIndex);
+			if (selectedPlantIndex >= plants.size()) {
+				selectedPlantIndex = -1;
+			}
+			selectedPartIndex = -1;
+		}
+	}
+
+	ImGui::Dummy(ImVec2(0.0f, 10.0f));
+	if (selectedPlantIndex >= 0) {
+		const auto& selectedPlant = plants[selectedPlantIndex];
+		if (ImGui::BeginCombo("Parts", selectedPartIndex >= 0 ? selectedPlant.getParts()[selectedPartIndex].getName().c_str() : "Select a Part")) {
+			for (int i = 0; i < selectedPlant.getParts().size(); ++i) {
+				bool isSelected = (selectedPartIndex == i);
+				if (ImGui::Selectable(selectedPlant.getParts()[i].getName().c_str(), isSelected)) {
+					selectedPartIndex = i;
+				}
+				if (isSelected) {
+					ImGui::SetItemDefaultFocus();
+				}
+			}
+			ImGui::EndCombo();
+		}
+
+		if (ImGui::Button("Delete Part")) {
+			if (!plants.empty() && selectedPlantIndex < plants.size()) {
+				auto& parts = plants[selectedPlantIndex].getParts();
+
+				if (!parts.empty() && selectedPartIndex < parts.size()) {
+					plants[selectedPlantIndex].removePart(selectedPartIndex);
+					selectedPartIndex = -1;
+				}
+			}
+		}
+
+		ImGui::Dummy(ImVec2(0.0f, 5.0f));
+		static char partName[64] = "";
+		ImGui::InputText("Part Name", partName, sizeof(partName));
+		if (ImGui::Button("Add New Part")) {
+			if (strlen(partName) > 0 && selectedPlantIndex < plants.size()) {
+				auto& parts = plants[selectedPlantIndex].getParts();
+
+				for (auto& part : parts) {
+					if (part.getName() == partName) {
+						std::cout << "Another part with the same name already exists" << std::endl;
+						return;
+					}
+				}
+
+				PlantPart newPart(partName);
+				plants[selectedPlantIndex].addPart(newPart);
+			}
+		}
+	}
+
+	if (selectedPlantIndex >= 0 && selectedPartIndex >= 0 && !previewingPlant && !previewingPart) {
+		auto& selectedPart = plants[selectedPlantIndex].getParts()[selectedPartIndex];
+
+		ImGui::Dummy(ImVec2(0.0f, 10.0f));
+		ImGui::Text("-------------------------------");
+		ImGui::Text("Editing Part: %s", selectedPart.getName().c_str());
+		if (ImGui::Button("Clear")) {
+			previewingPlant = false;
+			previewingPart = false;
+
+			selectedPart.clear();
+		}
+
+		ImGui::Dummy(ImVec2(0.0f, 10.0f));
+
+		ImGui::Checkbox("Left Curve", &showLeftCurve);
+		if (showLeftCurve && !previewingPart && !previewingPlant) {
+			int index = -1;
+
+			PointsData& leftControlPoints = selectedPart.getLeftControlPoints();
+
+			for (int i = 0; i < leftControlPoints.selected.size(); ++i) {
+				if (leftControlPoints.selected.at(i)) {
+					index = i;
+				}
+			}
+
+			if (index != -1) {
+				float weight = leftControlPoints.weights.at(index);
+				bool weightChanged = ImGui::SliderFloat("Weight", &weight, 0.0f, 20.0f);
+
+				if (weightChanged) {
+					leftControlPoints.weights.at(index) = weight;
+					std::vector<glm::vec3> leftCurve = updateBSpline(leftControlPoints);
+					selectedPart.setLeftCurve(leftCurve);
+				}
+			}
+
+			if (leftControlPoints.needsUpdate) {
+				selectedPart.setLeftCurve(updateBSpline(leftControlPoints));
+				leftControlPoints.needsUpdate = false;
+			}
+
+			handleEditingControlPointUpdate(leftControlPoints);
+
+			showRightCurve = false;
+			showCrossSection = false;
+
+			GPU_Geometry gpuGeom;
+			gpuGeom.setVerts(leftControlPoints.cpuGeom.verts);
+			gpuGeom.setCols(leftControlPoints.cpuGeom.cols);
+			gpuGeom.bind();
+		}
+
+		ImGui::Checkbox("Right Curve", &showRightCurve);
+		if (showRightCurve && !previewingPart && !previewingPlant) {
+			int index = -1;
+
+			PointsData& rightControlPoints = selectedPart.getRightControlPoints();
+
+			for (int i = 0; i < rightControlPoints.selected.size(); ++i) {
+				if (rightControlPoints.selected.at(i)) {
+					index = i;
+				}
+			}
+
+			if (index != -1) {
+				float weight = rightControlPoints.weights.at(index);
+				bool weightChanged = ImGui::SliderFloat("Weight", &weight, 0.0f, 20.0f);
+
+				if (weightChanged) {
+					rightControlPoints.weights.at(index) = weight;
+					std::vector<glm::vec3> rightCurve = updateBSpline(rightControlPoints);
+					selectedPart.setRightCurve(rightCurve);
+				}
+			}
+
+			if (rightControlPoints.needsUpdate) {
+				selectedPart.setRightCurve(updateBSpline(rightControlPoints));
+				rightControlPoints.needsUpdate = false;
+			}
+
+			if (cb->isLeftMouseDown()) {
+
+			}
+
+			handleEditingControlPointUpdate(rightControlPoints);
+
+			showLeftCurve = false;
+			showCrossSection = false;
+
+			GPU_Geometry gpuGeom;
+			gpuGeom.setVerts(rightControlPoints.cpuGeom.verts);
+			gpuGeom.setCols(rightControlPoints.cpuGeom.cols);
+			gpuGeom.bind();
+		}
+
+		ImGui::Checkbox("Cross Section", &showCrossSection);
+		if (showCrossSection && !previewingPart && !previewingPlant) {
+			int index = -1;
+
+			PointsData& crossSectionControlPoints = selectedPart.getCrossSectionControlPoints();
+
+			for (int i = 0; i < crossSectionControlPoints.selected.size(); ++i) {
+				if (crossSectionControlPoints.selected.at(i)) {
+					index = i;
+				}
+			}
+
+			if (index != -1) {
+				float weight = crossSectionControlPoints.weights.at(index);
+				bool weightChanged = ImGui::SliderFloat("Weight", &weight, 0.0f, 20.0f);
+
+				if (weightChanged) {
+					crossSectionControlPoints.weights.at(index) = weight;
+					std::vector<glm::vec3> crossSectionCurve = updateBSpline(crossSectionControlPoints);
+					selectedPart.setCrossSectionCurve(crossSectionCurve);
+				}
+			}
+
+			if (crossSectionControlPoints.needsUpdate) {
+				selectedPart.setCrossSectionCurve(updateBSpline(crossSectionControlPoints));
+				crossSectionControlPoints.needsUpdate = false;
+			}
+
+			handleEditingControlPointUpdate(crossSectionControlPoints);
+
+			showLeftCurve = false;
+			showRightCurve = false;
+
+			GPU_Geometry gpuGeom;
+			gpuGeom.setVerts(crossSectionControlPoints.cpuGeom.verts);
+			gpuGeom.setCols(crossSectionControlPoints.cpuGeom.cols);
+			gpuGeom.bind();
+		}
+
+
+		ImGui::Dummy(ImVec2(0.0f, 10.0f));
+		ImGui::Text("Transformations");
+		ImGui::DragFloat3("Scale", glm::value_ptr(selectedPart.getScale()), 0.1f, 0.1f, 10.0f);
+		ImGui::DragFloat3("Translation", glm::value_ptr(selectedPart.getTranslation()), 0.1f, -10.0f, 10.0f);
+		ImGui::DragFloat3("Rotation (degrees)", glm::value_ptr(selectedPart.getRotation()), 0.1f, -180.0f, 180.0f);
+
+		if (ImGui::Button("Preview Part")) {
+			if (selectedPart.getLeftCurve().empty() || selectedPart.getRightCurve().empty() || selectedPart.getCrossSectionCurve().empty()) {
+				std::cout << "Error: All three curves (left, right, cross-section) must be set before calculating the surface." << std::endl;
+			}
+			else {
+				if (selectedPart.getLeftCurve().size() != selectedPart.getCrossSectionCurve().size()) {
+					std::cout << "Error: Left and Right curves must have the same number of points." << std::endl;
+				}
+				else {
+					std::cout << "Part previewing..." << selectedPart.getName() << std::endl;
+
+					showLeftCurve = false;
+					showRightCurve = false;
+					showCrossSection = false;
+
+					previewingPart = true;
+				}
+			}
+		}
+
+		if (ImGui::Button("Preview Plant")) {
+
+			for (auto& part : plants[selectedPlantIndex].getParts()) {
+				if (selectedPart.getLeftCurve().empty() || selectedPart.getRightCurve().empty() || selectedPart.getCrossSectionCurve().empty()) {
+					std::cout << "Error: All three curves (left, right, cross-section) must be set before calculating the surface." << std::endl;
+					return;
+				}
+				if (selectedPart.getLeftCurve().empty() != selectedPart.getRightCurve().size()) {
+					std::cout << "Error: All left and right curve sizes must be equal" << std::endl;
+				}
+			}
+
+			std::cout << "Plant previewing..." << selectedPart.getName() << std::endl;
+
+			showLeftCurve = false;
+			showRightCurve = false;
+			showCrossSection = false;
+
+			previewingPlant = true;
+		}
+	}
+
+	if (selectedPlantIndex >= 0 && selectedPartIndex >= 0) {
+		auto& plant = plants[selectedPlantIndex];
+
+		if (previewingPart) {
+			if (ImGui::Button("Edit Surface")) {
+				cb->resetCamera();
+				previewingPart = false;
+				plant.getParts()[selectedPartIndex].setSurfaceGenerated(false);
+			}
+		}
+		else if (previewingPlant) {
+			if (ImGui::Button("Edit Surface")) {
+				cb->resetCamera();
+				previewingPlant = false;
+
+				for (auto& part : plant.getParts()) {
+					part.setSurfaceGenerated(false);
+				}
+			}
+		}
+	}
+}
+
+void Scene::handleEditingControlPointUpdate(PointsData& cp) {
+	if (cb->isRightMouseDown()) {
+		int indexToDelete = -1;
+
+		for (int i = 0; i < cp.cpuGeom.verts.size(); i++) {
+			glm::vec2 p = cb->getCursorPosGL();
+			glm::vec3 delta = (cp.cpuGeom.verts[i] - glm::vec3(p, 0.0f));
+			if (glm::length(delta) < 0.025f) {
+				indexToDelete = i;
+				break;
+			}
+		}
+
+		if (indexToDelete != -1) {
+			cp.cpuGeom.verts.erase(cp.cpuGeom.verts.begin() + indexToDelete);
+			cp.cpuGeom.cols.erase(cp.cpuGeom.cols.begin() + indexToDelete);
+			cp.selected.erase(cp.selected.begin() + indexToDelete);
+			cp.weights.erase(cp.weights.begin() + indexToDelete);
+			cp.needsUpdate = true;
+		}
+	}
+
+	if (cb->isLeftMouseDown() && controlPointIndex == -1) {
+		int indexToMove = -1;
+		glm::vec2 p = cb->getCursorPosGL();
+
+		for (int i = 0; i < cp.cpuGeom.verts.size(); i++) {
+			glm::vec3 delta = (cp.cpuGeom.verts[i] - glm::vec3(p, 0.0f));
+			if (glm::length(delta) < 0.05f) {
+				indexToMove = i;
+
+				std::fill(cp.cpuGeom.cols.begin(), cp.cpuGeom.cols.end(), glm::vec3(1.0f, 0.0f, 0.0f));
+				std::fill(cp.selected.begin(), cp.selected.end(), false);
+
+				cp.cpuGeom.cols.at(i) = glm::vec3(0.0f, 1.0f, 0.0f);
+				cp.selected.at(i) = true;
+				break;
+			}
+		}
+
+		if (indexToMove == -1) {
+			// Add a new point
+			std::fill(cp.cpuGeom.cols.begin(), cp.cpuGeom.cols.end(), glm::vec3(1.0f, 0.0f, 0.0f));
+			std::fill(cp.selected.begin(), cp.selected.end(), false);
+
+			cp.cpuGeom.verts.push_back(glm::vec3(p, 0.f));
+			cp.cpuGeom.cols.push_back(glm::vec3(0.f, 1.f, 0.f));
+			cp.selected.push_back(true);
+			cp.weights.push_back(1.0f);
+			cp.needsUpdate = true;
+		}
+		else {
+			controlPointIndex = indexToMove;
+		}
+	}
+	else if (cb->isLeftMouseDown()) {
+		assert(selectedPartIndex >= 0 && selectedPlantIndex >= 0);
+		auto& selectedPart = plants[selectedPlantIndex].getParts()[selectedPartIndex];
+
+		if (showLeftCurve) {
+			selectedPart.getLeftControlPoints().cpuGeom.verts.at(controlPointIndex) += 2.45f * cb->getDragOffset();
+			selectedPart.getLeftControlPoints().needsUpdate = true;
+		}
+		else if (showRightCurve) {
+			selectedPart.getRightControlPoints().cpuGeom.verts.at(controlPointIndex) += 2.45f * cb->getDragOffset();
+			selectedPart.getRightControlPoints().needsUpdate = true;
+		}
+		else if (showCrossSection) {
+			selectedPart.getCrossSectionControlPoints().cpuGeom.verts.at(controlPointIndex) += 2.45f * cb->getDragOffset();
+			selectedPart.getCrossSectionControlPoints().needsUpdate = true;
+		}
+	}
+	else {
+		controlPointIndex = -1;
+	}
+}
+
+std::vector<glm::vec3> Scene::updateBSpline(PointsData& controlPoints) {
+	std::vector<glm::vec3> bSpline;
+	int size = controlPoints.cpuGeom.verts.size();
+	if (size > 1) {
+		int k = size == 2 ? 2 : 3;
+		int m = size - 1;
+		float uStep = 0.02f;
+
+		std::vector<double> knotSequence = getKnotSequence(k, m);
+
+		bSpline.clear();
+
+		for (float u = 0.0f; u < 1.0f - 1e-4; u += uStep) {
+			glm::vec3 point = E_delta_1(controlPoints.cpuGeom.verts, controlPoints.weights, knotSequence, u, k, m);
+			bSpline.push_back(point);
+		}
+		glm::vec3 point = E_delta_1(controlPoints.cpuGeom.verts, controlPoints.weights, knotSequence, 1.0f, k, m);
+		bSpline.push_back(point);
+	}
+	return bSpline;
+}
+
+std::vector<double> Scene::getKnotSequence(int k, int m) {
+	std::vector<double> U;
+
+	double step = 1.0 / (m - k + 2);
+	for (int i = 0; i <= m + k; ++i) {
+		if (i < k) {
+			U.push_back(0.0);
+		}
+		else if (i > m) {
+			U.push_back(1.0);
+		}
+		else {
+			U.push_back(double(i - k + 1) / (m - k + 2));
+		}
+	}
+	return U;
+}
+
+glm::vec3 Scene::E_delta_1(const std::vector<glm::vec3>& ctrlPts, const std::vector<float>& weights, const std::vector<double>& U, float u, int k, int m) {
+
+	int d = -1;
+	for (int i = 0; i < m + k; ++i) {
+		if (u >= U[i] && u < U[i + 1]) {
+			d = i;
+			break;
+		}
+	}
+	if (d == -1) d = m;
+
+	std::vector<glm::vec3> C;
+	std::vector<float> w;
+
+	for (int j = 0; j < k; ++j) {
+		C.push_back(weights[d - j] * ctrlPts[d - j]);
+		w.push_back(weights[d - j]);
+	}
+
+	for (int r = k; r >= 2; --r) {
+		int j = d;
+		for (int s = 0; s <= r - 2; ++s) {
+			float omega = (u - U[j]) / (U[j + r - 1] - U[j]);
+			C[s] = omega * C[s] + (1 - omega) * C[s + 1];
+			w[s] = omega * w[s] + (1 - omega) * w[s + 1];
+			j--;
+		}
+	}
+
+	return C[0] / w[0];
+}
+
+void Scene::updateScene() {
+	if (modeChanged) {
+		cb->resetCamera();
+		modeChanged = false;
+	}
+
+	if (comboSelection == 0) {
+		cb->setIs3D(true);
+		updateLandscapeState();
+	}
+	else if (comboSelection == 1) {
+		if (previewingPlant || previewingPart) cb->setIs3D(true);
+		else cb->setIs3D(false);
+	}
+}
+
+void Scene::updateLandscapeState() {
+	if (cb->isLeftMouseDown() && controlPointIndex == -1) {
+		handleGPUPickingLandscape();
+	}
+	else if (cb->isLeftMouseDown()) {
+		landscape.updateControlPoint(controlPointIndex, cb->getDragOffset());
+		landscape.generateSurface();
+	}
+}
+
+void Scene::draw() {
+	glEnable(GL_LINE_SMOOTH);
+	glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glEnable(GL_DEPTH_TEST);
+
+	// draw rest of the scene
+	glEnable(GL_FRAMEBUFFER_SRGB);
+	glPolygonMode(GL_FRONT_AND_BACK, (simpleWireframe ? GL_LINE : GL_FILL));
+
+	// draw scene
+	if (comboSelection == 0) {
+		drawLandscapeControlPoints();
+		drawLandscape();
+		drawAxes("controlPoints");
+	}
+	else if (comboSelection == 1) {
+		previewPlants();
+		drawControlPoints();
+		drawCurves();
+		drawAxes("editing");
+	}
+
+	// draw imgui
+	glDisable(GL_FRAMEBUFFER_SRGB);
+	drawImGui();
+}
+
+void Scene::previewPlants() {
+	if (previewingPart) {
+		assert(selectedPartIndex >= 0 && selectedPlantIndex >= 0);
+		auto& selectedPart = plants[selectedPlantIndex].getParts()[selectedPartIndex];
+		if (!selectedPart.isSurfaceGenerated()) {
+			selectedPart.generatePlantPart();
+		}
+
+		GPU_Geometry gpuGeom;
+		gpuGeom.setVerts(selectedPart.getSurface());
+		gpuGeom.setCols(std::vector<glm::vec3>(selectedPart.getSurface().size(), glm::vec3(0.0f)));
+		gpuGeom.bind();
+
+		shaders.at("controlPoint")->use();
+		cb->viewPipelinePlantPreview(*shaders.at("controlPoint"), selectedPart.getPartTransformMatrix());
+		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+		glDrawArrays(GL_LINE_STRIP, 0, selectedPart.getSurface().size());
+	}
+	else if (previewingPlant) {
+		assert(selectedPlantIndex >= 0);
+		auto& plant = plants[selectedPlantIndex];
+
+		for (auto& part : plant.getParts()) {
+			if (!part.isSurfaceGenerated()) {
+				part.generatePlantPart();
+			}
+
+			GPU_Geometry gpuGeom;
+			gpuGeom.setVerts(part.getSurface());
+			gpuGeom.setCols(std::vector<glm::vec3>(part.getSurface().size(), glm::vec3(0.0f)));
+			gpuGeom.bind();
+
+			shaders.at("controlPoint")->use();
+			cb->viewPipelinePlantPreview(*shaders.at("controlPoint"), part.getPartTransformMatrix());
+			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+			glDrawArrays(GL_LINE_STRIP, 0, part.getSurface().size());
+		}
+	}
+}
+
+void Scene::drawCurves() {
+
+	if (!previewingPlant && !previewingPart) {
+		if (selectedPlantIndex >= 0 && selectedPartIndex >= 0) {
+			auto& selectedPart = plants[selectedPlantIndex].getParts()[selectedPartIndex];
+
+			shaders.at("editing")->use();
+			cb->viewPipelineEditing(*shaders.at("editing"));
+
+			GPU_Geometry gpuGeom;
+
+			gpuGeom.setVerts(selectedPart.getLeftCurve());
+			gpuGeom.setCols(std::vector<glm::vec3>(selectedPart.getLeftCurve().size(), glm::vec3(1.0f, 0.0f, 0.0f)));
+			gpuGeom.bind();
+			glDrawArrays(GL_LINE_STRIP, 0, selectedPart.getLeftCurve().size());
+
+			gpuGeom.setVerts(selectedPart.getRightCurve());
+			gpuGeom.setCols(std::vector<glm::vec3>(selectedPart.getRightCurve().size(), glm::vec3(0.0f, 1.0f, 0.0f)));
+			gpuGeom.bind();
+			glDrawArrays(GL_LINE_STRIP, 0, selectedPart.getRightCurve().size());
+
+			gpuGeom.setVerts(selectedPart.getCrossSectionCurve());
+			gpuGeom.setCols(std::vector<glm::vec3>(selectedPart.getCrossSectionCurve().size(), glm::vec3(0.0f, 0.0f, 1.0f)));
+			gpuGeom.bind();
+			glDrawArrays(GL_LINE_STRIP, 0, selectedPart.getCrossSectionCurve().size());
+		}
+	}
+}
+
+void Scene::drawControlPoints() {
+	if (!previewingPlant && !previewingPart) {
+		if (selectedPlantIndex >= 0 && selectedPartIndex >= 0) {
+			auto& selectedPart = plants[selectedPlantIndex].getParts()[selectedPartIndex];
+
+			CPU_Geometry cpuGeom;
+			GPU_Geometry gpuGeom;
+
+			if (showLeftCurve) {
+				cpuGeom = selectedPart.getLeftControlPoints().cpuGeom;
+
+				gpuGeom.setVerts(cpuGeom.verts);
+				gpuGeom.setCols(std::vector<glm::vec3>(cpuGeom.verts.size(), glm::vec3(1.0f, 0.0f, 0.0f)));
+
+			}
+			else if (showRightCurve) {
+				cpuGeom = selectedPart.getRightControlPoints().cpuGeom;
+				gpuGeom.setVerts(cpuGeom.verts);
+				gpuGeom.setCols(std::vector<glm::vec3>(cpuGeom.verts.size(), glm::vec3(1.0f, 0.0f, 0.0f)));
+			}
+			else if (showCrossSection) {
+				cpuGeom = selectedPart.getCrossSectionControlPoints().cpuGeom;
+				gpuGeom.setVerts(cpuGeom.verts);
+				gpuGeom.setCols(std::vector<glm::vec3>(cpuGeom.verts.size(), glm::vec3(1.0f, 0.0f, 0.0f)));
+			}
+
+			gpuGeom.bind();
+			glPointSize(10);
+			glDrawArrays(GL_POINTS, 0, cpuGeom.verts.size());
+
+			glDisable(GL_FRAMEBUFFER_SRGB); // disable sRGB for things like imgui
+		}
+	}
+}
+
+void Scene::drawAxes(const char* shaderType) {
+	if (!show3DAxes) return;
+
+	std::vector<glm::vec3> axisVerts = {
+		glm::vec3(0.0f), glm::vec3(1.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+		glm::vec3(0.0f), glm::vec3(0.0f, 0.0f, 1.0f)
+	};
+
+	std::vector<glm::vec3> axisColors = {
+		glm::vec3(1.0f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f),
+		glm::vec3(0.0f, 1.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f),
+		glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 1.0f)
+	};
+
+	GPU_Geometry axisGeom;
+	axisGeom.setVerts(axisVerts);
+	axisGeom.setCols(axisColors);
+	axisGeom.bind();
+
+	shaders.at(shaderType)->use();
+	if (strcmp(shaderType, "editing") == 0) {
+		cb->viewPipelineEditing(*shaders.at(shaderType));
+	}
+	else if (strcmp(shaderType, "controlPoints") == 0) {
+		cb->viewPipelineControlPoints(*shaders.at(shaderType));
+	}
+
+
+	glLineWidth(2.0f);
+	glDrawArrays(GL_LINES, 0, axisVerts.size());
+}
+
+void Scene::drawLandscape() {
+	shaders.at("default")->use();
+	cb->viewPipeline();
+
+	landscape.bind();
+	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+	glDrawArrays(GL_TRIANGLES, 0, landscape.numVerts());
+}
+
+void Scene::drawLandscapeControlPoints() {
+	shaders.at("controlPoint")->use();  
+	cb->viewPipelineControlPoints(*shaders.at("controlPoint"));  
+
+	GPU_Geometry controlPointsGPU;  
+
+	std::vector<std::vector<glm::vec3>> cp = landscape.getControlGrid();  
+
+	std::vector<glm::vec3> flattenedControlPoints;  
+	for (const auto& row : cp) {  
+		flattenedControlPoints.insert(flattenedControlPoints.end(), row.begin(), row.end());  
+	}  
+
+	controlPointsGPU.setVerts(flattenedControlPoints);  
+	controlPointsGPU.setCols(std::vector<glm::vec3>(flattenedControlPoints.size(), glm::vec3(1.0f, 0.0f, 0.0f)));  
+	controlPointsGPU.bind();  
+
+	glPointSize(10);  
+	glDrawArrays(GL_POINTS, 0, flattenedControlPoints.size());  
+}

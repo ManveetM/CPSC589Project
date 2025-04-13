@@ -22,11 +22,18 @@ public:
 
 	glm::mat4 getView();
 	glm::vec3 getPos();
+	glm::vec3 getLookAt() { return lookat; }
 
 	void incrementTheta(float dt);
 	void incrementPhi(float dp);
 	void incrementR(float dr);
 	void pan(float dx, float dy, int width, int height);
+
+	void setValues(float t_, float p_, float r_) {
+		theta = t_;
+		phi = p_;
+		radius = r_;
+	}
 
 	Frame getFrame() {
 		return generateFrameVectors();

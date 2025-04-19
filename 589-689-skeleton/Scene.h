@@ -80,6 +80,7 @@ private:
 	void drawCurves();
 	void drawControlPoints();
 	void handleEditingControlPointUpdate(PointsData& cp);
+	void applyBrushDeformation();
 
 	// __________________________________________________________________
 	// STATES
@@ -90,6 +91,13 @@ private:
 	bool lightingChange = false;
 	bool show3DAxes = false;
 	int controlPointIndex = -1;
+
+	float brushRadius = 1.5f;
+	float brushStrength = 0.1f;
+	float noiseScale = 0.5f;
+	float noiseAmplitude = 0.2f;
+	bool brushRaise = true;
+	bool brushEnabled = false;
 
 	// editing
 	int selectedPlantIndex = -1;

@@ -232,6 +232,10 @@ public:
 		return temp + glm::vec2(camera.getLookAt());
 	}
 
+	Camera getCamera() {
+		return camera;
+	}
+
 private:
 	// Uniform locations do not, ordinarily, change between frames.
 	// However, we may need to update them if the shader is changed and recompiled.

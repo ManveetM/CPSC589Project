@@ -1,4 +1,5 @@
 #include "Scene.h"
+# include "Noise.h"
 
 // Fix the issue by properly initializing the `pickerTex` object using its constructor instead of calling it like a function.
 void Scene::initializeGpuPicking() {
@@ -125,6 +126,14 @@ void Scene::drawImGui() {
 	lightingChange |= ImGui::ColorEdit3("DiffuseColor", glm::value_ptr(diffuseCol));
 	lightingChange |= ImGui::SliderFloat("Ambient strength", &ambientStrength, 0.0f, 1.f);
 	lightingChange |= ImGui::Checkbox("Simple wireframe", &simpleWireframe);
+
+	ImGui::Text("Brush Tool");
+	ImGui::Checkbox("Enable Brush Tool", &brushEnabled);
+	ImGui::Checkbox("Raise (Uncheck to Lower)", &brushRaise);
+	ImGui::SliderFloat("Brush Radius", &brushRadius, 0.1f, 10.0f);
+	ImGui::SliderFloat("Brush Strength", &brushStrength, 0.01f, 1.0f);
+	ImGui::SliderFloat("Noise Scale", &noiseScale, 0.01f, 2.0f);
+	ImGui::SliderFloat("Noise Amplitude", &noiseAmplitude, 0.0f, 1.0f);
 
 	// Framerate display, in case you need to debug performance.
 	ImGui::Text("Average %.1f ms/frame (%.1f fps)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
@@ -620,7 +629,10 @@ void Scene::updateScene() {
 }
 
 void Scene::updateLandscapeState() {
-	if (cb->isLeftMouseDown() && controlPointIndex == -1) {
+	if (brushEnabled && cb->isLeftMouseDown()) {
+		applyBrushDeformation();
+	}
+	else if (cb->isLeftMouseDown() && controlPointIndex == -1) {
 		handleGPUPickingLandscape();
 	}
 	else if (cb->isLeftMouseDown()) {
@@ -840,4 +852,65 @@ void Scene::drawLandscapeControlPoints() {
 
 	glPointSize(10);  
 	glDrawArrays(GL_POINTS, 0, flattenedControlPoints.size());  
+}
+
+void Scene::applyBrushDeformation() {
+	/*static float brushRadius = 1.5f;
+	static float brushStrength = 0.1f;
+	static float noiseScale = 0.5f;
+	static float noiseAmplitude = 0.2f;
+	static bool brushRaise = true;*/
+
+	if (!cb->isLeftMouseDown()) return;
+
+	glm::vec2 mouseGL = cb->getCursorPosGL();
+	glm::mat4 view = cb->getCamera().getView();
+	glm::mat4 proj = glm::perspective(glm::radians(45.0f), 1.0f, 0.01f, 1000.0f);
+	glm::mat4 invVP = glm::inverse(proj * view);
+
+	glm::vec4 screenNear = glm::vec4(mouseGL.x, mouseGL.y, -1.0f, 1.0f);
+	glm::vec4 screenFar = glm::vec4(mouseGL.x, mouseGL.y, 1.0f, 1.0f);
+
+	glm::vec4 nearPos4 = invVP * screenNear;
+	glm::vec4 farPos4 = invVP * screenFar;
+	nearPos4 /= nearPos4.w;
+	farPos4 /= farPos4.w;
+
+	glm::vec3 worldNear = glm::vec3(nearPos4);
+	glm::vec3 worldFar = glm::vec3(farPos4);
+
+	glm::vec3 rayOrigin = cb->getCamera().getPos();
+	glm::vec3 rayDir = glm::normalize(worldFar - worldNear);
+
+	float t = -rayOrigin.y / rayDir.y;
+	if (t <= 0) return;
+
+	glm::vec3 intersectionPt = rayOrigin + rayDir * t;
+
+	std::vector<std::vector<glm::vec3>> grid = landscape.getControlGrid();
+	int gridSize = grid.size();
+	bool modified = false;
+
+	for (int i = 0; i < gridSize; ++i) {
+		for (int j = 0; j < gridSize; ++j) {
+			glm::vec3 pt = grid[i][j];
+			glm::vec2 pt2d(pt.x, pt.z);
+			glm::vec2 intersection2d(intersectionPt.x, intersectionPt.z);
+			float dist = glm::distance(pt2d, intersection2d);
+
+			if (dist < brushRadius) {
+				float influence = 1.0f - (dist / brushRadius);
+				influence = std::pow(influence, 2.0f);
+				float baseDisplacement = brushStrength * influence * (brushRaise ? 1.0f : -1.0f);
+				float noise = generateNoise(pt.x, pt.z, noiseScale, 1.0f);
+				pt.y += baseDisplacement * (1.0f + noiseAmplitude * noise);
+				landscape.updateControlPoint(i * gridSize + j, pt - grid[i][j]);
+				modified = true;
+			}
+		}
+	}
+
+	if (modified) {
+		landscape.generateSurface();
+	}
 }

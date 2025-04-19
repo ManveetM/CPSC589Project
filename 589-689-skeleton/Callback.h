@@ -188,7 +188,7 @@ public:
 	void viewPipelineEditing(ShaderProgram& sp) {
 		glm::mat4 M = glm::mat4(1.0f);
 		glm::mat4 V = camera.getView();
-		glm::mat4 P = glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 10.0f);
+		glm::mat4 P = glm::ortho(-aspect, aspect, -1.0f, 1.0f, -1.0f, 100.0f);
 
 		GLint uniMat = glGetUniformLocation(sp, "M");
 		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(M));

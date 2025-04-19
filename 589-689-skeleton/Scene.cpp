@@ -60,6 +60,11 @@ void Scene::initializeLandscape() {
 }
 
 void Scene::handleGPUPickingLandscape() {
+
+	if (!showControlPoints) {
+		return;
+	}
+
 	glEnable(GL_LINE_SMOOTH);
 	glEnable(GL_FRAMEBUFFER_SRGB);
 	glEnable(GL_DEPTH_TEST);
@@ -125,13 +130,7 @@ void Scene::drawImGui() {
 	lightingChange |= ImGui::SliderFloat("Ambient strength", &ambientStrength, 0.0f, 1.f);
 	lightingChange |= ImGui::Checkbox("Simple wireframe", &simpleWireframe);
 
-	ImGui::Text("Brush Tool");
-	ImGui::Checkbox("Enable Brush Tool", &brushEnabled);
-	ImGui::Checkbox("Raise (Uncheck to Lower)", &brushRaise);
-	ImGui::SliderFloat("Brush Radius", &brushRadius, 0.1f, 10.0f);
-	ImGui::SliderFloat("Brush Strength", &brushStrength, 0.01f, 1.0f);
-	ImGui::SliderFloat("Noise Scale", &noiseScale, 0.01f, 2.0f);
-	ImGui::SliderFloat("Noise Amplitude", &noiseAmplitude, 0.0f, 1.0f);
+	
 
 	// Framerate display, in case you need to debug performance.
 	ImGui::Text("Average %.1f ms/frame (%.1f fps)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
@@ -159,7 +158,17 @@ void Scene::drawImGui() {
 	ImGui::Dummy(ImVec2(0.0f, 5.0f));
 
 	if (comboSelection == 0) {
+		ImGui::Text("Brush Tool");
+		ImGui::Dummy(ImVec2(0.0f, 5.0f));
+		ImGui::Checkbox("Enable Brush Tool", &brushEnabled);
+		ImGui::Checkbox("Raise (Uncheck to Lower)", &brushRaise);
+		ImGui::SliderFloat("Brush Radius", &brushRadius, 0.1f, 10.0f);
+		ImGui::SliderFloat("Brush Strength", &brushStrength, 0.01f, 1.0f);
+		ImGui::SliderFloat("Noise Scale", &noiseScale, 0.01f, 2.0f);
+		ImGui::SliderFloat("Noise Amplitude", &noiseAmplitude, 0.0f, 1.0f);
 
+		ImGui::Dummy(ImVec2(0.0f, 2.0f));
+		ImGui::Checkbox("Show control points", &showControlPoints);
 	}
 	else if (comboSelection == 1) {
 		drawEditingImGui();
@@ -680,7 +689,7 @@ void Scene::draw() {
 	if (comboSelection == 0) {
 		drawLandscapeControlPoints();
 		drawLandscape();
-		drawAxes("controlPoints");
+		drawAxes("controlPoint");
 	}
 	else if (comboSelection == 1) {
 		previewPlants();
@@ -859,6 +868,10 @@ void Scene::drawLandscape() {
 }
 
 void Scene::drawLandscapeControlPoints() {
+	if (!showControlPoints) {
+		return;
+	}
+
 	shaders.at("controlPoint")->use();  
 	cb->viewPipelineControlPoints(*shaders.at("controlPoint"));  
 

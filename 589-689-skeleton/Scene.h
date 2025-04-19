@@ -33,7 +33,7 @@ public:
 		, activeShader(shaders_.at("default"))
 		, cb(callbacks)
 		, pickerTex(0, GL_R32I, window_.getFramebufferSize().x, window_.getFramebufferSize().y, GL_RED_INTEGER, GL_INT, GL_NEAREST)
-		, landscape(5, 3, 3, 20, 20)
+		, landscape(20, 3, 3, 30, 30)
 	{
 		initialize();
 		initializeGpuPicking();
@@ -104,6 +104,7 @@ private:
 	int selectedPartIndex = -1;
 	bool previewingPart = false;
 	bool previewingPlant = false;
+	bool showControlPoints = false;
 
 	bool showLeftCurve = false;
 	bool showRightCurve = false;

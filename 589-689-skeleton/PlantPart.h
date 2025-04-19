@@ -15,7 +15,7 @@ public:
         , scale(1.0f, 1.0f, 1.0f)
         , translation(0.0f, 0.0f, 0.0f)
         , rotation(0.0f, 0.0f, 0.0f)
-        , partTransformMatrix(glm::mat4(1.0f))
+		, baseColor(0.0f, 0.0f, 0.0f)
         , needsUpdate(false) {}
 
     // Getters
@@ -35,8 +35,17 @@ public:
         return rotation;
     }
 
-    const glm::mat4& getPartTransformMatrix() const {
-        return partTransformMatrix;
+    glm::vec3& getBaseColor() {
+        return baseColor;
+    }
+
+    const glm::mat4 getPartTransformMatrix() const {
+		glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), scale);
+		glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), translation);
+		glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+		rotationMatrix = glm::rotate(rotationMatrix, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+		rotationMatrix = glm::rotate(rotationMatrix, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+        return translationMatrix * rotationMatrix * scaleMatrix;
     }
 
     bool isUpdateNeeded() const {
@@ -45,6 +54,18 @@ public:
 
     const std::vector<glm::vec3>& getSurface() const {
         return surface;
+    }
+
+    const std::vector<unsigned int>& getIndices() const {
+        return indices;
+    }
+
+    const std::vector<glm::vec3>& getNormals() const {
+        return normals;
+    }
+
+    const std::vector<glm::vec3>& getCols() const {
+        return cols;
     }
 
     PointsData& getLeftControlPoints() {
@@ -76,10 +97,6 @@ public:
         name = newName;
     }
 
-    void setPartTransformMatrix(const glm::mat4& matrix) {
-        partTransformMatrix = matrix;
-    }
-
     void setUpdateNeeded(bool update) {
         needsUpdate = update;
     }
@@ -94,6 +111,10 @@ public:
 
     void setRightCurve(const std::vector<glm::vec3>& curve) {
         rightCurve = curve;
+    }
+
+    void setNormal(const std::vector<glm::vec3>& newNormal) {
+        normals = newNormal;
     }
 
     void setCrossSectionCurve(const std::vector<glm::vec3>& curve) {
@@ -128,18 +149,21 @@ private:
     PointsData rightControlPoints;
     PointsData crossSectionControlPoints;
 
+
     std::vector<glm::vec3> leftCurve;
     std::vector<glm::vec3> rightCurve;
     std::vector<glm::vec3> crossSectionCurve;
 
     bool needsUpdate;
     std::vector<glm::vec3> surface;
+    std::vector<glm::vec3> cols;
+    std::vector<glm::vec3> normals;
+	std::vector<unsigned int> indices;
 
     glm::vec3 scale;
     glm::vec3 translation;
 	glm::vec3 rotation;
-
-    glm::mat4 partTransformMatrix;
+    glm::vec3 baseColor;
 
     bool surfaceGenerated = false;
 };

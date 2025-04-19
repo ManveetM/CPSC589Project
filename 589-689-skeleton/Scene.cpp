@@ -48,8 +48,10 @@ void Scene::initialize() {
 	// Create an orange object
 	Plant plant("Plant");
 	PlantPart part("PlantPart");
+	PlantPart part2("PlantPart2");
 
 	plant.addPart(part);
+	plant.addPart(part2);
 	plants.push_back(plant);
 }
 
@@ -117,13 +119,12 @@ void Scene::drawImGui() {
 
 	ImGui::Begin("Preferences");
 
-	lighhtingChage |= ImGui::ColorEdit3("Diffuse colour", glm::value_ptr(diffuseCol));
-
 	// The rest of our ImGui widgets.
-	lighhtingChage |= ImGui::DragFloat3("Light's position", glm::value_ptr(lightPos));
-	lighhtingChage |= ImGui::ColorEdit3("Light's colour", glm::value_ptr(lightCol));
-	lighhtingChage |= ImGui::SliderFloat("Ambient strength", &ambientStrength, 0.0f, 1.f);
-	lighhtingChage |= ImGui::Checkbox("Simple wireframe", &simpleWireframe);
+	lightingChange |= ImGui::DragFloat3("Light's position", glm::value_ptr(lightPos));
+	lightingChange |= ImGui::ColorEdit3("Light's colour", glm::value_ptr(lightCol));
+	lightingChange |= ImGui::ColorEdit3("DiffuseColor", glm::value_ptr(diffuseCol));
+	lightingChange |= ImGui::SliderFloat("Ambient strength", &ambientStrength, 0.0f, 1.f);
+	lightingChange |= ImGui::Checkbox("Simple wireframe", &simpleWireframe);
 
 	// Framerate display, in case you need to debug performance.
 	ImGui::Text("Average %.1f ms/frame (%.1f fps)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
@@ -235,7 +236,10 @@ void Scene::drawEditingImGui() {
 	}
 
 	if (selectedPlantIndex >= 0 && selectedPartIndex >= 0 && !previewingPlant && !previewingPart) {
+		
 		auto& selectedPart = plants[selectedPlantIndex].getParts()[selectedPartIndex];
+
+		selectedPart.setSurfaceGenerated(false);
 
 		ImGui::Dummy(ImVec2(0.0f, 10.0f));
 		ImGui::Text("-------------------------------");
@@ -377,6 +381,8 @@ void Scene::drawEditingImGui() {
 		ImGui::DragFloat3("Translation", glm::value_ptr(selectedPart.getTranslation()), 0.1f, -10.0f, 10.0f);
 		ImGui::DragFloat3("Rotation (degrees)", glm::value_ptr(selectedPart.getRotation()), 0.1f, -180.0f, 180.0f);
 
+		ImGui::ColorEdit3("Base Color", glm::value_ptr(selectedPart.getBaseColor()));
+
 		if (ImGui::Button("Preview Part")) {
 			if (selectedPart.getLeftCurve().empty() || selectedPart.getRightCurve().empty() || selectedPart.getCrossSectionCurve().empty()) {
 				std::cout << "Error: All three curves (left, right, cross-section) must be set before calculating the surface." << std::endl;
@@ -426,17 +432,14 @@ void Scene::drawEditingImGui() {
 			if (ImGui::Button("Edit Surface")) {
 				cb->resetCamera();
 				previewingPart = false;
-				plant.getParts()[selectedPartIndex].setSurfaceGenerated(false);
+				previewingPlant = false;
 			}
 		}
 		else if (previewingPlant) {
 			if (ImGui::Button("Edit Surface")) {
 				cb->resetCamera();
+				previewingPart = false;
 				previewingPlant = false;
-
-				for (auto& part : plant.getParts()) {
-					part.setSurfaceGenerated(false);
-				}
 			}
 		}
 	}
@@ -592,6 +595,15 @@ glm::vec3 Scene::E_delta_1(const std::vector<glm::vec3>& ctrlPts, const std::vec
 }
 
 void Scene::updateScene() {
+	if (!cb->isLeftMouseDown()) {
+		controlPointIndex = -1;
+	}
+
+	if (lightingChange) {
+		shaders.at("default")->use();
+		cb->updateShadingUniforms(lightPos, lightCol, diffuseCol, ambientStrength, false);
+	}
+
 	if (modeChanged) {
 		cb->resetCamera();
 		modeChanged = false;
@@ -653,15 +665,21 @@ void Scene::previewPlants() {
 			selectedPart.generatePlantPart();
 		}
 
+		// Draw the surface
+		shaders.at("default")->use();
+
 		GPU_Geometry gpuGeom;
 		gpuGeom.setVerts(selectedPart.getSurface());
-		gpuGeom.setCols(std::vector<glm::vec3>(selectedPart.getSurface().size(), glm::vec3(0.0f)));
+		gpuGeom.setCols(selectedPart.getCols());
+		gpuGeom.setIndices(selectedPart.getIndices());
+		gpuGeom.setNormals(selectedPart.getNormals());
 		gpuGeom.bind();
 
-		shaders.at("controlPoint")->use();
-		cb->viewPipelinePlantPreview(*shaders.at("controlPoint"), selectedPart.getPartTransformMatrix());
-		glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-		glDrawArrays(GL_LINE_STRIP, 0, selectedPart.getSurface().size());
+		cb->viewPipeline();
+
+		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+		glDrawElements(GL_TRIANGLES, selectedPart.getIndices().size(), GL_UNSIGNED_INT, 0);
+
 	}
 	else if (previewingPlant) {
 		assert(selectedPlantIndex >= 0);
@@ -672,15 +690,24 @@ void Scene::previewPlants() {
 				part.generatePlantPart();
 			}
 
+			if (part.getSurface().size() == 0) {
+				continue;
+			}
+
+			shaders.at("default")->use();
+
 			GPU_Geometry gpuGeom;
+
 			gpuGeom.setVerts(part.getSurface());
-			gpuGeom.setCols(std::vector<glm::vec3>(part.getSurface().size(), glm::vec3(0.0f)));
+			gpuGeom.setCols(part.getCols());
+			gpuGeom.setIndices(part.getIndices());
+			gpuGeom.setNormals(part.getNormals());
 			gpuGeom.bind();
 
-			shaders.at("controlPoint")->use();
-			cb->viewPipelinePlantPreview(*shaders.at("controlPoint"), part.getPartTransformMatrix());
-			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-			glDrawArrays(GL_LINE_STRIP, 0, part.getSurface().size());
+			cb->viewPipelinePlantPreview(part.getPartTransformMatrix());
+
+			glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+			glDrawElements(GL_TRIANGLES, part.getIndices().size(), GL_UNSIGNED_INT, 0);
 		}
 	}
 }
@@ -718,6 +745,9 @@ void Scene::drawControlPoints() {
 	if (!previewingPlant && !previewingPart) {
 		if (selectedPlantIndex >= 0 && selectedPartIndex >= 0) {
 			auto& selectedPart = plants[selectedPlantIndex].getParts()[selectedPartIndex];
+
+			shaders.at("editing")->use();
+			cb->viewPipelineEditing(*shaders.at("editing"));
 
 			CPU_Geometry cpuGeom;
 			GPU_Geometry gpuGeom;
@@ -783,8 +813,8 @@ void Scene::drawAxes(const char* shaderType) {
 }
 
 void Scene::drawLandscape() {
-	shaders.at("default")->use();
-	cb->viewPipeline();
+	shaders.at("controlPoint")->use();
+	cb->viewPipelineControlPoints(*shaders.at("controlPoint"));
 
 	landscape.bind();
 	glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);

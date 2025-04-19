@@ -8,6 +8,7 @@
 
 #include "VertexArray.h"
 #include "VertexBuffer.h"
+#include "ElementBuffer.h"
 
 #include <glad/glad.h>
 #include <glm/glm.hpp>
@@ -37,6 +38,7 @@ public:
 	void setUVs(const std::vector<glm::vec2>& uvs);
 	void setCols(const std::vector<glm::vec3>& cols);
 	void setNormals(const std::vector<glm::vec3>& norms);
+	void setIndices(const std::vector<unsigned int>& indices);
 
 private:
 	// note: due to how OpenGL works, vao needs to be
@@ -48,4 +50,5 @@ private:
 	VertexBuffer normalsBuffer;
 
 	VertexBuffer colBuffer;
+	ElementBuffer ebo;
 };

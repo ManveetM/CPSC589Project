@@ -9,6 +9,7 @@ GPU_Geometry::GPU_Geometry()
 	, uvBuffer(1, 2, GL_FLOAT)
 	, normalsBuffer(2, 3, GL_FLOAT)
 	, colBuffer(3, 3, GL_FLOAT)
+	, ebo(4, 3, GL_FLOAT)
 {}
 
 
@@ -27,4 +28,9 @@ void GPU_Geometry::setNormals(const std::vector<glm::vec3>& norms) {
 
 void GPU_Geometry::setCols(const std::vector<glm::vec3>& cols) {
 	colBuffer.uploadData(sizeof(glm::vec3) * cols.size(), cols.data(), GL_STATIC_DRAW);
+}
+
+void GPU_Geometry::setIndices(const std::vector<unsigned int>& indices)
+{
+	ebo.uploadData(sizeof(unsigned int) * indices.size(), indices.data(), GL_STATIC_DRAW);
 }

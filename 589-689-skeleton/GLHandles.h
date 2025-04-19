@@ -237,3 +237,32 @@ public:
 private:
 	GLuint renderbufferID;
 };
+
+
+// An RAII class for managing a ElementBuffer GLuint for OpenGL.
+class ElementBufferHandle {
+
+public:
+	ElementBufferHandle();
+
+	// Disallow copying
+	ElementBufferHandle(const ElementBufferHandle&) = delete;
+	ElementBufferHandle operator=(const ElementBufferHandle&) = delete;
+
+	// Allow moving
+	ElementBufferHandle(ElementBufferHandle&& other) noexcept;
+	ElementBufferHandle& operator=(ElementBufferHandle&& other) noexcept;
+
+	// Clean up after ourselves.
+	~ElementBufferHandle();
+
+
+	// Allow casting from this type into a GLuint
+	// This allows usage in situations where a function expects a GLuint
+	operator GLuint() const;
+	GLuint value() const;
+
+private:
+	GLuint eboID;
+
+};

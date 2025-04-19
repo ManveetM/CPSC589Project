@@ -175,16 +175,16 @@ public:
 		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(P));
 	}
 
-	void viewPipelinePlantPreview(ShaderProgram& sp, const glm::mat4& modelMatrix) {
+	void viewPipelinePlantPreview(const glm::mat4& modelMatrix) {
 		glm::mat4 M = modelMatrix;
 		glm::mat4 V = camera.getView();
 		glm::mat4 P = glm::perspective(glm::radians(45.0f), aspect, 0.01f, 1000.f);
 
-		GLint uniMat = glGetUniformLocation(sp, "M");
+		GLint uniMat = glGetUniformLocation(shader, "M");
 		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(M));
-		uniMat = glGetUniformLocation(sp, "V");
+		uniMat = glGetUniformLocation(shader, "V");
 		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(V));
-		uniMat = glGetUniformLocation(sp, "P");
+		uniMat = glGetUniformLocation(shader, "P");
 		glUniformMatrix4fv(uniMat, 1, GL_FALSE, glm::value_ptr(P));
 	}
 
@@ -202,14 +202,13 @@ public:
 	}
 
 	void updateShadingUniforms(
-		const glm::vec3& lightPos, const glm::vec3& lightCol,
-		const glm::vec3& diffuseCol, float ambientStrength, bool texExistence
+		const glm::vec3& lightPos, const glm::vec3& lightCol, glm::vec3& diffuseCol, float ambientStrength, bool texExistence
 	)
 	{
 		// Like viewPipeline(), this function assumes shader.use() was called before.
+		glUniform3f(diffuseColLoc, diffuseCol.r, diffuseCol.g, diffuseCol.b);
 		glUniform3f(lightPosLoc, lightPos.x, lightPos.y, lightPos.z);
 		glUniform3f(lightColLoc, lightCol.r, lightCol.g, lightCol.b);
-		glUniform3f(diffuseColLoc, diffuseCol.r, diffuseCol.g, diffuseCol.b);
 		glUniform1f(ambientStrengthLoc, ambientStrength);
 		glUniform1i(texExistenceLoc, (int)texExistence);
 	}
@@ -230,7 +229,7 @@ public:
 		glm::vec2 temp = 2.f * adjustedForAspect - glm::vec2(1.f, 1.f);
 		temp.x *= aspect;
 
-		return temp;
+		return temp + glm::vec2(camera.getLookAt());
 	}
 
 private:
@@ -239,11 +238,11 @@ private:
 	void updateUniformLocations() {
 		mLoc = glGetUniformLocation(shader, "M");
 		vLoc = glGetUniformLocation(shader, "V");
-		pLoc = glGetUniformLocation(shader, "P");;
-		lightPosLoc = glGetUniformLocation(shader, "lightPos");;
-		lightColLoc = glGetUniformLocation(shader, "lightCol");;
-		diffuseColLoc = glGetUniformLocation(shader, "diffuseCol");;
-		ambientStrengthLoc = glGetUniformLocation(shader, "ambientStrength");;
+		pLoc = glGetUniformLocation(shader, "P");
+		lightPosLoc = glGetUniformLocation(shader, "lightPos");
+		lightColLoc = glGetUniformLocation(shader, "lightCol");
+		ambientStrengthLoc = glGetUniformLocation(shader, "ambientStrength");
+		diffuseColLoc = glGetUniformLocation(shader, "diffuseCol");
 		texExistenceLoc = glGetUniformLocation(shader, "texExistence");
 
 		mLocPicker = glGetUniformLocation(pickerShader, "M");

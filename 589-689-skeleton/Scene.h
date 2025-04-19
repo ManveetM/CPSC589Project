@@ -87,7 +87,7 @@ private:
 	int comboSelection = 0;
 	bool modeChanged = false;
 	bool isDrawingLandscape = false;
-	bool lighhtingChage = false;
+	bool lightingChange = false;
 	bool show3DAxes = false;
 	int controlPointIndex = -1;
 
@@ -108,9 +108,9 @@ private:
 
 	// __________________________________________________________________
 	// LIGHTING
-	glm::vec3 lightPos = glm::vec3(0.f, 35.f, -35.f);
+	glm::vec3 lightPos = glm::vec3(0.f, 5.f, 8.f);
 	glm::vec3 lightCol = glm::vec3(1.f);
-	glm::vec3 diffuseCol = glm::vec3(1.f, 0.f, 0.f);
+	glm::vec3 diffuseCol = glm::vec3(1.0f, 1.1f, 1.1f);
 	float ambientStrength = 0.035f;
 	bool simpleWireframe = false;
 };

@@ -251,3 +251,41 @@ RenderbufferHandle::operator GLuint() const {
 GLuint RenderbufferHandle::value() const {
 	return renderbufferID;
 }
+
+
+//------------------------------------------------------------------------------
+
+
+ElementBufferHandle::ElementBufferHandle()
+	: eboID(0) // Due to OpenGL syntax, we can't initial directly here, like we want.
+{
+	glGenBuffers(1, &eboID);
+}
+
+
+ElementBufferHandle::ElementBufferHandle(ElementBufferHandle&& other) noexcept
+	: eboID(std::move(other.eboID))
+{
+	other.eboID = 0;
+}
+
+
+ElementBufferHandle& ElementBufferHandle::operator=(ElementBufferHandle&& other) noexcept {
+	std::swap(eboID, other.eboID);
+	return *this;
+}
+
+
+ElementBufferHandle::~ElementBufferHandle() {
+	glDeleteBuffers(1, &eboID);
+}
+
+
+ElementBufferHandle::operator GLuint() const {
+	return eboID;
+}
+
+
+GLuint ElementBufferHandle::value() const {
+	return eboID;
+}

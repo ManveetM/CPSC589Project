@@ -1,0 +1,15 @@
+CPSC 589 Final Project
+By: Manveet Mandal and Mika Boba
+
+This is based on the project starter code provided on D2L and compiles in the same way.
+We build it using:
+Cmake -H. -Bbuild
+and then we use "make" to compile. 
+
+Run using "589-689-3D-skeleton.exe"
+
+There are two main editing modes: "Default" and "Editing".
+
+In default you can see the tensor product surface. Using left-click + drag a user can move points around. 
+Select "enable brush tool" to enable the brush tool. Use left-click plus drag to use the brush. With the brush a user can select the brush size (radius),
+brush strength, noise scale (strength of noise), and noise amplitude (how noisy to generate).

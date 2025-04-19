@@ -49,10 +49,8 @@ void Scene::initialize() {
 	// Create an orange object
 	Plant plant("Plant");
 	PlantPart part("PlantPart");
-	PlantPart part2("PlantPart2");
 
 	plant.addPart(part);
-	plant.addPart(part2);
 	plants.push_back(plant);
 }
 
@@ -225,6 +223,30 @@ void Scene::drawEditingImGui() {
 		}
 
 		ImGui::Dummy(ImVec2(0.0f, 5.0f));
+		static char plantName[64] = "";
+		ImGui::InputText("Plant Name", plantName, sizeof(plantName));
+		if (ImGui::Button("Add New Plant")) {
+			if (strlen(plantName) > 0) {
+
+				for (auto& plant : plants) {
+					if (plant.getName() == plantName) {
+						std::cout << "Another plant with the same name already exists" << std::endl;
+						return;
+					}
+				}
+
+				previewingPlant = false;
+				previewingPart = false;
+
+				selectedPlantIndex = -1;
+				selectedPartIndex = -1;
+
+				Plant newPlant(plantName);
+				plants.push_back(newPlant);
+			}
+		}
+
+		ImGui::Dummy(ImVec2(0.0f, 5.0f));
 		static char partName[64] = "";
 		ImGui::InputText("Part Name", partName, sizeof(partName));
 		if (ImGui::Button("Add New Part")) {
@@ -237,6 +259,9 @@ void Scene::drawEditingImGui() {
 						return;
 					}
 				}
+
+				previewingPlant = false;
+				previewingPart = false;
 
 				PlantPart newPart(partName);
 				plants[selectedPlantIndex].addPart(newPart);

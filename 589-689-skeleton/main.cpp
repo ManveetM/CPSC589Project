@@ -36,6 +36,7 @@ int main() {
 
 	// WINDOW
 	glfwInit();
+	glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 	Window window(1200, 1200, "CPSC 589/689"); // could set callbacks at construction if desired
 
 	//GLDebug::enable();

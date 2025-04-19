@@ -61,10 +61,7 @@ public:
 	}
 
 	virtual void keyCallback(int key, int scancode, int action, int mods) {
-		if (key == GLFW_KEY_R && action == GLFW_PRESS) {
-			shader.recompile();
-			updateUniformLocations();
-		}
+
 	}
 
 	virtual void mouseButtonCallback(int button, int action, int mods) {

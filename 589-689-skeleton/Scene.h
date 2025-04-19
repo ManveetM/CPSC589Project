@@ -33,7 +33,7 @@ public:
 		, activeShader(shaders_.at("default"))
 		, cb(callbacks)
 		, pickerTex(0, GL_R32I, window_.getFramebufferSize().x, window_.getFramebufferSize().y, GL_RED_INTEGER, GL_INT, GL_NEAREST)
-		, landscape(5, 3, 3, 20, 20)
+		, landscape(10, 3, 3, 20, 20)
 	{
 		initialize();
 		initializeGpuPicking();
